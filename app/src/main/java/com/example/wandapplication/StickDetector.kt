@@ -69,11 +69,19 @@ class StickDetector(private val context: Context) {
     // ── Gesture state ─────────────────────────────────────────────────────────
 
     private val posHistory = ArrayDeque<FloatArray>()  // [normX, normY, timestampMs]
-    private val HISTORY_MAX       = 45
-    private val GESTURE_WINDOW_MS = 1200L
-    private val MIN_GESTURE_DIST  = 0.10f
-    private val SPELL_COOLDOWN_MS = 1500L
-    private var lastSpellTime     = 0L
+    private val HISTORY_MAX       = 60
+
+    // Gesture tuning
+    // A flick moves ~0.2-0.4 normalised units in ~200-400 ms.
+    // At ~20 analysis fps that is ~0.3 norm-units/second minimum.
+    private val GESTURE_WINDOW_MS  = 700L   // only look at the last 700 ms
+    private val MIN_FLICK_SPEED    = 0.30f  // normalised units / second — filters idle drift
+    private val ACTIVE_SPEED_RATIO = 0.35f  // frames above (peak * ratio) count as "active"
+    private val MIN_ACTIVE_FRAMES  = 3      // need at least this many fast frames
+    private val DIR_DOMINANCE      = 1.8f   // |dominant axis| must be this × |other axis|
+    private val DIR_CONSISTENCY    = 0.60f  // fraction of active frames that agree with net dir
+    private val SPELL_COOLDOWN_MS  = 1800L
+    private var lastSpellTime      = 0L
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -177,28 +185,71 @@ class StickDetector(private val context: Context) {
     // ── Gesture / spell recognition ───────────────────────────────────────────
 
     /**
-     * Two-spell classifier operating on recent tip positions.
+     * Two-spell classifier based on velocity analysis of recent tip positions.
      *
-     *   LUMOS            – left → right flick  (horizontal dominant, dX > 0)
-     *   WINGARDIUM       – top → bottom flick  (vertical dominant, dY > 0)
+     *   LUMOS       – left → right flick
+     *   WINGARDIUM  – top  → bottom flick
      *
-     * The directional dominance threshold (2×) keeps diagonal wrist-wobble
-     * from accidentally triggering the wrong spell.
+     * Algorithm
+     * ---------
+     * 1. Compute instantaneous velocity between every consecutive stored position.
+     * 2. Identify the peak speed in the window; gate out sessions that never moved fast.
+     * 3. Collect "active" frames: those whose speed ≥ peak × ACTIVE_SPEED_RATIO.
+     *    This isolates the actual flick and ignores slow drift before/after it.
+     * 4. Compute the average velocity vector over active frames (net direction).
+     * 5. Check directional consistency: ≥ DIR_CONSISTENCY fraction of active frames
+     *    must have a velocity vector that points within 60° of the net direction
+     *    (dot product > 0.5 with the unit net direction).
+     * 6. If consistent, classify by which axis dominates the net direction.
      */
     private fun recogniseSpell(now: Long): String {
-        val recent = posHistory.filter { now - it[2].toLong() < GESTURE_WINDOW_MS }
-        if (recent.size < 8) return ""
+        val window = posHistory.filter { now - it[2].toLong() < GESTURE_WINDOW_MS }
+        if (window.size < 4) return ""
 
-        val dX   = recent.last()[0] - recent.first()[0]
-        val dY   = recent.last()[1] - recent.first()[1]
-        val dist = sqrt(dX * dX + dY * dY)
-        if (dist < MIN_GESTURE_DIST) return ""
+        // ── 1. Instantaneous velocities (normalised units / second) ────────
+        val n = window.size - 1
+        val vx    = FloatArray(n)
+        val vy    = FloatArray(n)
+        val speed = FloatArray(n)
 
-        val adX = abs(dX); val adY = abs(dY)
+        for (i in 0 until n) {
+            val dtMs = (window[i + 1][2] - window[i][2]).coerceAtLeast(1f)
+            vx[i]    = (window[i + 1][0] - window[i][0]) / dtMs * 1000f
+            vy[i]    = (window[i + 1][1] - window[i][1]) / dtMs * 1000f
+            speed[i] = sqrt(vx[i] * vx[i] + vy[i] * vy[i])
+        }
+
+        // ── 2. Peak speed gate ─────────────────────────────────────────────
+        val peakSpeed = speed.max()
+        if (peakSpeed < MIN_FLICK_SPEED) return ""
+
+        // ── 3. Active frames (the burst of the flick) ──────────────────────
+        val threshold  = peakSpeed * ACTIVE_SPEED_RATIO
+        val activeIdx  = speed.indices.filter { speed[it] >= threshold }
+        if (activeIdx.size < MIN_ACTIVE_FRAMES) return ""
+
+        // ── 4. Net direction over active frames ────────────────────────────
+        var netVx = 0f; var netVy = 0f
+        for (i in activeIdx) { netVx += vx[i]; netVy += vy[i] }
+        netVx /= activeIdx.size; netVy /= activeIdx.size
+
+        val netSpeed = sqrt(netVx * netVx + netVy * netVy)
+        if (netSpeed < 1e-6f) return ""
+
+        // ── 5. Directional consistency check ──────────────────────────────
+        var consistent = 0
+        for (i in activeIdx) {
+            val dot = (vx[i] * netVx + vy[i] * netVy) / (speed[i] * netSpeed)
+            if (dot > 0.5f) consistent++   // within ~60° of the net direction
+        }
+        if (consistent.toFloat() / activeIdx.size < DIR_CONSISTENCY) return ""
+
+        // ── 6. Classify ────────────────────────────────────────────────────
+        val absX = abs(netVx); val absY = abs(netVy)
         return when {
-            adX > adY * 2f && dX > 0 -> "LUMOS"       // left → right
-            adY > adX * 2f && dY > 0 -> "WINGARDIUM"  // top → bottom
-            else                      -> ""
+            absX > absY * DIR_DOMINANCE && netVx > 0 -> "LUMOS"       // left → right
+            absY > absX * DIR_DOMINANCE && netVy > 0 -> "WINGARDIUM"  // top  → bottom
+            else                                      -> ""
         }
     }
 
