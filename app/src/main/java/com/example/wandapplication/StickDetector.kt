@@ -48,13 +48,20 @@ class StickDetector(private val context: Context) {
     /**
      * Vivid-red HSV bounds.
      *   Hue: wraps around 0° → check [0, HUE_RED_HI] and [HUE_RED_LO2, 360)
-     *   Sat: ≥ 0.55  (rules out pinks and dull reds)
-     *   Val: ≥ 0.30  (rules out very dark / shadowed reds)
+     *   Sat: ≥ 0.65  (rules out pinks and dull reds)
+     *   Val: ≥ 0.35  (rules out very dark / shadowed reds)
+     *
+     * RGB ratio guards (the main skin-rejection layer):
+     *   A vivid red sticker has R ≈ 220, G ≈ 30, B ≈ 30  → R/G ≈ 7
+     *   Skin tone has            R ≈ 220, G ≈ 170, B ≈ 140 → R/G ≈ 1.3
+     *   Requiring R > G * R_OVER_G and R > B * R_OVER_B eliminates skin reliably.
      */
-    private val HUE_RED_HI  = 15f     // upper bound of the 0°-side lobe
-    private val HUE_RED_LO2 = 345f    // start of the 360°-side lobe
-    private val SAT_MIN      = 0.55f
-    private val VAL_MIN      = 0.30f
+    private val HUE_RED_HI  = 12f     // tight upper bound on the 0°-side lobe
+    private val HUE_RED_LO2 = 348f    // tight start of the 360°-side lobe
+    private val SAT_MIN      = 0.65f
+    private val VAL_MIN      = 0.35f
+    private val R_OVER_G     = 1.8f   // red channel must be 1.8× the green channel
+    private val R_OVER_B     = 1.6f   // red channel must be 1.6× the blue channel
 
     private val MIN_RED_PIXELS   = 8       // below this → noise, not a dot
     private val CONFIDENCE_PIXELS = 80f    // pixels for full confidence
@@ -144,37 +151,39 @@ class StickDetector(private val context: Context) {
     // ── Colour check ──────────────────────────────────────────────────────────
 
     private fun isRed(r: Int, g: Int, b: Int): Boolean {
+        // Fast RGB ratio pre-check — eliminates skin before any float math
+        if (g == 0 || b == 0) return false
+        if (r.toFloat() / g < R_OVER_G) return false
+        if (r.toFloat() / b < R_OVER_B) return false
+
         val rf = r / 255f; val gf = g / 255f; val bf = b / 255f
         val maxC  = maxOf(rf, gf, bf)
         val minC  = minOf(rf, gf, bf)
         val delta = maxC - minC
 
         if (delta < 0.04f) return false   // achromatic
-
-        // Only qualify if red is the dominant channel
-        if (maxC != rf) return false
+        if (maxC != rf)    return false   // red must be the dominant channel
 
         val sat = delta / maxC
         val v   = maxC
         if (sat < SAT_MIN || v < VAL_MIN) return false
 
         // Hue in [0, HUE_RED_HI] or [HUE_RED_LO2, 360)
-        val hue = run {
-            var h = 60f * ((gf - bf) / delta)
-            if (h < 0f) h += 360f
-            h
-        }
+        var hue = 60f * ((gf - bf) / delta)
+        if (hue < 0f) hue += 360f
         return hue <= HUE_RED_HI || hue >= HUE_RED_LO2
     }
 
     // ── Gesture / spell recognition ───────────────────────────────────────────
 
     /**
-     * Spell mapping:
-     *   LUMOS            – left → right swipe  (lights on)
-     *   NOX              – right → left swipe  (lights off)
-     *   EXPELLIARMUS     – upward swipe
-     *   ACCIO            – downward swipe
+     * Two-spell classifier operating on recent tip positions.
+     *
+     *   LUMOS            – left → right flick  (horizontal dominant, dX > 0)
+     *   WINGARDIUM       – top → bottom flick  (vertical dominant, dY > 0)
+     *
+     * The directional dominance threshold (2×) keeps diagonal wrist-wobble
+     * from accidentally triggering the wrong spell.
      */
     private fun recogniseSpell(now: Long): String {
         val recent = posHistory.filter { now - it[2].toLong() < GESTURE_WINDOW_MS }
@@ -187,11 +196,9 @@ class StickDetector(private val context: Context) {
 
         val adX = abs(dX); val adY = abs(dY)
         return when {
-            adX > adY * 1.5f && dX > 0  -> "LUMOS"
-            adX > adY * 1.5f && dX < 0  -> "NOX"
-            adY > adX * 1.5f && dY < 0  -> "EXPELLIARMUS"
-            adY > adX * 1.5f && dY > 0  -> "ACCIO"
-            else                          -> ""
+            adX > adY * 2f && dX > 0 -> "LUMOS"       // left → right
+            adY > adX * 2f && dY > 0 -> "WINGARDIUM"  // top → bottom
+            else                      -> ""
         }
     }
 
