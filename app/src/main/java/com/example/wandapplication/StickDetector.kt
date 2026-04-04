@@ -70,7 +70,7 @@ class StickDetector(private val context: Context) {
     private val posHistory = ArrayDeque<FloatArray>()  // [normX, normY, timestampMs]
     private val HISTORY_MAX       = 60
 
-    private val EVAL_PERIOD_MS = 3000L   // evaluate once every 3 seconds
+    private val EVAL_PERIOD_MS = 1500L   // evaluate once every 3 seconds
     private var lastEvalTime   = 0L
 
     // ── Public API ────────────────────────────────────────────────────────────
