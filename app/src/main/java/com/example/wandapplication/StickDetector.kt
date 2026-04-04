@@ -70,9 +70,8 @@ class StickDetector(private val context: Context) {
     private val posHistory = ArrayDeque<FloatArray>()  // [normX, normY, timestampMs]
     private val HISTORY_MAX       = 60
 
-    private val GESTURE_WINDOW_MS = 800L
-    private val SPELL_COOLDOWN_MS = 1800L
-    private var lastSpellTime     = 0L
+    private val EVAL_PERIOD_MS = 3000L   // evaluate once every 3 seconds
+    private var lastEvalTime   = 0L
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -126,9 +125,7 @@ class StickDetector(private val context: Context) {
         posHistory.addLast(floatArrayOf(tipXN, tipYN, now.toFloat()))
         while (posHistory.size > HISTORY_MAX) posHistory.removeFirst()
 
-        val spell = if (now - lastSpellTime > SPELL_COOLDOWN_MS) {
-            recogniseSpell(now).also { if (it.isNotEmpty()) lastSpellTime = now }
-        } else ""
+        val spell = recogniseSpell(now)
 
         val coordStr = "(${(tipXN * 100).toInt()}%, ${(tipYN * 100).toInt()}%)"
         val spellStr = if (spell.isNotEmpty()) " → $spell!" else ""
@@ -176,11 +173,18 @@ class StickDetector(private val context: Context) {
     // ── Gesture / spell recognition ───────────────────────────────────────────
 
     private fun recogniseSpell(now: Long): String {
-        val window = posHistory.filter { now - it[2].toLong() < GESTURE_WINDOW_MS }
+        // Only evaluate at the end of each 3-second window
+        if (now - lastEvalTime < EVAL_PERIOD_MS) return ""
+        lastEvalTime = now
+
+        val window = posHistory.filter { now - it[2].toLong() < EVAL_PERIOD_MS }
         if (window.size < 4) return ""
 
         val startX = window.first()[0]; val startY = window.first()[1]
         val endX   = window.last()[0];  val endY   = window.last()[1]
+
+        // Clear history so the next 3-second window starts fresh
+        posHistory.clear()
 
         return when {
             startY < 0.5f && endY > 0.5f -> "WINGARDIUM"  // upper half → lower half
