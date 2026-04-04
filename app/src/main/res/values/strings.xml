@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Wand Application</string>
+    <string name="screen_title">Wand Spell Sender</string>
+    <string name="screen_subtitle">Tap the button to publish spell code "1" over MQTT.</string>
+    <string name="publish_spell">Cast Spell</string>
+    <string name="status_idle">Status: ready to cast</string>
+    <string name="status_sending">Status: sending spell...</string>
+    <string name="status_success">Status: spell published</string>
+</resources>
