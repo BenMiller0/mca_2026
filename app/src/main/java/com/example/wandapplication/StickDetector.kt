@@ -70,8 +70,9 @@ class StickDetector(private val context: Context) {
     private val posHistory = ArrayDeque<FloatArray>()  // [normX, normY, timestampMs]
     private val HISTORY_MAX       = 60
 
-    private val EVAL_PERIOD_MS = 1500L   // evaluate once every 3 seconds
-    private var lastEvalTime   = 0L
+    private val EVAL_PERIOD_MS  = 1500L  // evaluate once every 1.5 seconds
+    private val GESTURE_MIN_DIFF = 0.15f // normalised units the averages must differ by
+    private var lastEvalTime    = 0L
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -173,22 +174,34 @@ class StickDetector(private val context: Context) {
     // ── Gesture / spell recognition ───────────────────────────────────────────
 
     private fun recogniseSpell(now: Long): String {
-        // Only evaluate at the end of each 3-second window
         if (now - lastEvalTime < EVAL_PERIOD_MS) return ""
         lastEvalTime = now
 
-        val window = posHistory.filter { now - it[2].toLong() < EVAL_PERIOD_MS }
-        if (window.size < 4) return ""
+        val window = posHistory.toList()
+        posHistory.clear()   // start fresh for the next window
 
-        val startX = window.first()[0]; val startY = window.first()[1]
-        val endX   = window.last()[0];  val endY   = window.last()[1]
+        if (window.size < 6) return ""
 
-        // Clear history so the next 3-second window starts fresh
-        posHistory.clear()
+        // Split recorded positions into first half and second half.
+        // Average each half's X and Y separately.
+        // A genuine gesture will show a clear shift in the relevant axis
+        // across the majority of recorded points — far more robust than
+        // comparing only the first and last single positions.
+        val mid   = window.size / 2
+        val first = window.subList(0, mid)
+        val last  = window.subList(mid, window.size)
+
+        val avgYFirst = first.map { it[1] }.average().toFloat()
+        val avgYLast  = last.map  { it[1] }.average().toFloat()
+        val avgXFirst = first.map { it[0] }.average().toFloat()
+        val avgXLast  = last.map  { it[0] }.average().toFloat()
+
+        val diffY = avgYLast - avgYFirst   // positive = moved downward
+        val diffX = avgXLast - avgXFirst   // positive = moved rightward
 
         return when {
-            startY < 0.5f && endY > 0.5f -> "WINGARDIUM"  // upper half → lower half
-            startX < 0.5f && endX > 0.5f -> "LUMOS"       // left half  → right half
+            diffY >  GESTURE_MIN_DIFF && diffY > kotlin.math.abs(diffX) -> "WINGARDIUM"
+            diffX >  GESTURE_MIN_DIFF && diffX > kotlin.math.abs(diffY) -> "LUMOS"
             else -> ""
         }
     }
