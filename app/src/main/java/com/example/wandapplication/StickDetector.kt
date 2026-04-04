@@ -3,7 +3,6 @@ package com.example.wandapplication
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
-import kotlin.math.abs
 
 /**
  * Detects a wand tip by looking for a small **red dot** affixed to its end.
@@ -72,7 +71,6 @@ class StickDetector(private val context: Context) {
     private val HISTORY_MAX       = 60
 
     private val GESTURE_WINDOW_MS = 800L
-    private val MIN_TRAVEL        = 0.15f  // minimum normalised distance to count as a flick
     private val SPELL_COOLDOWN_MS = 1800L
     private var lastSpellTime     = 0L
 
@@ -181,12 +179,12 @@ class StickDetector(private val context: Context) {
         val window = posHistory.filter { now - it[2].toLong() < GESTURE_WINDOW_MS }
         if (window.size < 4) return ""
 
-        val dX = window.last()[0] - window.first()[0]
-        val dY = window.last()[1] - window.first()[1]
+        val startX = window.first()[0]; val startY = window.first()[1]
+        val endX   = window.last()[0];  val endY   = window.last()[1]
 
         return when {
-            dX < -MIN_TRAVEL && abs(dX) > abs(dY) -> "LUMOS"       // high X → low X
-            dY < -MIN_TRAVEL && abs(dY) > abs(dX) -> "WINGARDIUM"  // high Y → low Y
+            startY < 0.5f && endY > 0.5f -> "WINGARDIUM"  // upper half → lower half
+            startX < 0.5f && endX > 0.5f -> "LUMOS"       // left half  → right half
             else -> ""
         }
     }
