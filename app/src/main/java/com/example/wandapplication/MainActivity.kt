@@ -1,10 +1,19 @@
 package com.example.wandapplication
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.google.android.material.button.MaterialButton
@@ -18,8 +27,21 @@ import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
     private lateinit var publishButton: MaterialButton
+    private lateinit var cameraButton: MaterialButton
     private lateinit var statusText: TextView
     private val mqttExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    
+    private var imageCapture: ImageCapture? = null
+    
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            startCamera()
+        } else {
+            statusText.text = "Camera permission denied"
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,10 +54,15 @@ class MainActivity : AppCompatActivity() {
         }
 
         publishButton = findViewById(R.id.publishButton)
+        cameraButton = findViewById(R.id.cameraButton)
         statusText = findViewById(R.id.statusText)
 
         publishButton.setOnClickListener {
             publishSpell()
+        }
+        
+        cameraButton.setOnClickListener {
+            openCamera()
         }
     }
 
@@ -105,6 +132,80 @@ class MainActivity : AppCompatActivity() {
         } else {
             "Status: failed ($detail)"
         }
+    }
+
+    private fun openCamera() {
+        when {
+            ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED -> {
+                startCamera()
+            }
+            else -> {
+                requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+        }
+    }
+    
+    private fun startCamera() {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+        
+        cameraProviderFuture.addListener({
+            val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
+            
+            val preview = Preview.Builder().build().also {
+                it.setSurfaceProvider(findViewById<androidx.camera.view.PreviewView>(R.id.previewView)?.surfaceProvider)
+            }
+            
+            imageCapture = ImageCapture.Builder().build()
+            
+            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+            
+            try {
+                cameraProvider.unbindAll()
+                cameraProvider.bindToLifecycle(
+                    this, cameraSelector, preview, imageCapture
+                )
+                
+                findViewById<androidx.camera.view.PreviewView>(R.id.previewView).visibility = android.view.View.VISIBLE
+                statusText.text = "Camera ready - tap preview to capture"
+                
+                findViewById<androidx.camera.view.PreviewView>(R.id.previewView).setOnClickListener {
+                    capturePhoto()
+                }
+                
+            } catch (exc: Exception) {
+                Log.e(TAG, "Use case binding failed", exc)
+                statusText.text = "Camera initialization failed"
+            }
+        }, ContextCompat.getMainExecutor(this))
+    }
+    
+    private fun capturePhoto() {
+        val imageCapture = imageCapture ?: return
+        
+        val photoFile = java.io.File(
+            externalMediaDirs.firstOrNull(),
+            "wand_photo_${System.currentTimeMillis()}.jpg"
+        )
+        
+        val outputFileOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+        
+        imageCapture.takePicture(
+            outputFileOptions,
+            ContextCompat.getMainExecutor(this),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                    val savedUri = output.savedUri ?: android.net.Uri.fromFile(photoFile)
+                    statusText.text = "Photo saved: ${photoFile.name}"
+                    Log.d(TAG, "Photo captured and saved: $savedUri")
+                }
+                
+                override fun onError(exception: ImageCaptureException) {
+                    Log.e(TAG, "Photo capture failed", exception)
+                    statusText.text = "Photo capture failed: ${exception.message}"
+                }
+            }
+        )
     }
 
     companion object {
