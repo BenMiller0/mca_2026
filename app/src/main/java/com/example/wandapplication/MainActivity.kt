@@ -184,8 +184,9 @@ class MainActivity : AppCompatActivity() {
                 statusText.text = result.message
 
                 // Auto-publish when a spell is recognised
-                if (result.spell.isNotEmpty()) {
-                    publishSpell(result.spell)
+                when (result.spell) {
+                    "WINGARDIUM" -> publishSpell("1")
+                    "LUMOS"      -> publishSpell("2")
                 }
             } else {
                 wandOverlay.clearWand()
