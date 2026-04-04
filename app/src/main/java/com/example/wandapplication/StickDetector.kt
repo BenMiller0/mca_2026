@@ -6,15 +6,22 @@ import android.util.Log
 import kotlin.math.*
 
 /**
- * Detects a brown wooden wand in a camera frame using HSV colour segmentation.
+ * Detects a wand tip by looking for a small **red dot** affixed to its end.
  *
  * Pipeline:
- *  1. Scale the input frame down to a small analysis resolution for speed.
- *  2. Collect all pixels whose HSV value falls in the "brown" range.
- *  3. Require a minimum pixel count and a minimum aspect-ratio (elongated shape).
- *  4. Run a 2-D PCA on the brown pixel cloud to find the wand's principal axis.
- *  5. The tip is the endpoint with the smaller Y value (higher in the frame).
+ *  1. Scale the frame to 320×240 for speed.
+ *  2. Collect every pixel whose HSV falls in the vivid-red range.
+ *     Red wraps around 0° in HSV, so we check H ∈ [0°,15°] ∪ [345°,360°].
+ *  3. Require at least MIN_RED_PIXELS hits (filters out single stray pixels).
+ *  4. Compute the centroid of the red blob → that is the wand-tip position.
+ *  5. Optionally estimate angle from the bounding box of the blob.
  *  6. Accumulate tip positions over time and classify motion as a spell gesture.
+ *
+ * Why a red dot?
+ *  Colour segmentation of a brown wand fails when a hand is holding it because
+ *  the combined region is no longer elongated.  A vivid red marker is highly
+ *  distinct from skin, wood, and typical backgrounds, so a simple blob-centroid
+ *  gives a rock-solid tip coordinate with no shape assumptions needed.
  */
 class StickDetector(private val context: Context) {
 
@@ -22,143 +29,93 @@ class StickDetector(private val context: Context) {
 
     data class WandDetectionResult(
         val isDetected: Boolean,
-        /** Normalised 0-1 coordinates of the wand tip (left/top = 0). */
+        /** Normalised 0-1 tip coordinates (left/top = 0). */
         val tipX: Float = 0f,
         val tipY: Float = 0f,
-        /** Normalised coordinates of the wand base (held end). */
-        val baseX: Float = 0f,
-        val baseY: Float = 0f,
-        /** Angle of the wand in degrees (0 = horizontal right, +90 = pointing down). */
+        /** Angle in degrees estimated from the red blob's bounding box. */
         val angle: Float = 0f,
         val confidence: Float = 0f,
-        /** Non-empty string when a spell gesture was just recognised. */
+        /** Non-empty when a spell gesture was just recognised. */
         val spell: String = "",
         val message: String = ""
     )
 
-    // Keep old name as a type alias so existing call-sites still compile.
-    @Suppress("unused")
-    val StickDetectionResult get() = WandDetectionResult::class
-
     // ── Config ────────────────────────────────────────────────────────────────
 
-    /** Resolution to which the input frame is scaled before analysis. */
     private val ANALYSIS_W = 320
     private val ANALYSIS_H = 240
 
-    /** HSV bounds for "brown wand" colour.
-     *  Hue 8-38°  (orange-brown spectrum)
-     *  Sat 25-90% (not a muddy grey, not neon)
-     *  Val 12-78% (not too dark / washed-out)
+    /**
+     * Vivid-red HSV bounds.
+     *   Hue: wraps around 0° → check [0, HUE_RED_HI] and [HUE_RED_LO2, 360)
+     *   Sat: ≥ 0.55  (rules out pinks and dull reds)
+     *   Val: ≥ 0.30  (rules out very dark / shadowed reds)
      */
-    private val HUE_LO = 8f;  private val HUE_HI = 38f
-    private val SAT_LO = 0.25f; private val SAT_HI = 0.90f
-    private val VAL_LO = 0.12f; private val VAL_HI = 0.78f
+    private val HUE_RED_HI  = 15f     // upper bound of the 0°-side lobe
+    private val HUE_RED_LO2 = 345f    // start of the 360°-side lobe
+    private val SAT_MIN      = 0.55f
+    private val VAL_MIN      = 0.30f
 
-    private val MIN_BROWN_PIXELS  = 18      // fewer → noise, not a wand
-    private val MIN_ASPECT_RATIO  = 2.8f    // width-to-height or height-to-width
-    private val CONFIDENCE_PIXELS = 250f    // pixels needed for max confidence
+    private val MIN_RED_PIXELS   = 8       // below this → noise, not a dot
+    private val CONFIDENCE_PIXELS = 80f    // pixels for full confidence
 
     // ── Gesture state ─────────────────────────────────────────────────────────
 
-    /** Each entry: [normTipX, normTipY, timestampMs]. */
-    private val posHistory = ArrayDeque<FloatArray>()
-    private val HISTORY_MAX   = 45
+    private val posHistory = ArrayDeque<FloatArray>()  // [normX, normY, timestampMs]
+    private val HISTORY_MAX       = 45
     private val GESTURE_WINDOW_MS = 1200L
-    private val MIN_GESTURE_DIST  = 0.12f   // normalised distance across analysis frame
+    private val MIN_GESTURE_DIST  = 0.10f
     private val SPELL_COOLDOWN_MS = 1500L
-    private var lastSpellTime = 0L
+    private var lastSpellTime     = 0L
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    /** Entry point used by MainActivity. */
     fun detectStick(bitmap: Bitmap): WandDetectionResult = detectWand(bitmap)
 
     fun detectWand(bitmap: Bitmap): WandDetectionResult {
-        // 1. Scale down for performance
         val scaled = Bitmap.createScaledBitmap(bitmap, ANALYSIS_W, ANALYSIS_H, false)
         val w = scaled.width
         val h = scaled.height
 
-        // 2. Read all pixels at once (fast bulk read)
         val pixels = IntArray(w * h)
         scaled.getPixels(pixels, 0, w, 0, 0, w, h)
         if (scaled != bitmap) scaled.recycle()
 
-        // 3. Collect brown-pixel coordinates
-        val bx = mutableListOf<Float>()
-        val by = mutableListOf<Float>()
+        // ── 1. Collect red pixels ──────────────────────────────────────────
+        var sumX = 0L; var sumY = 0L; var count = 0
+        var minX = w;  var maxX = 0
+        var minY = h;  var maxY = 0
 
         for (idx in pixels.indices) {
             val p = pixels[idx]
             val r = (p shr 16) and 0xFF
             val g = (p shr 8)  and 0xFF
             val b =  p         and 0xFF
-            if (isBrown(r, g, b)) {
-                bx.add((idx % w).toFloat())
-                by.add((idx / w).toFloat())
+            if (isRed(r, g, b)) {
+                val px = idx % w
+                val py = idx / w
+                sumX += px; sumY += py; count++
+                if (px < minX) minX = px; if (px > maxX) maxX = px
+                if (py < minY) minY = py; if (py > maxY) maxY = py
             }
         }
 
-        if (bx.size < MIN_BROWN_PIXELS) {
-            return WandDetectionResult(false, message = "Scanning… (${bx.size} brown px)")
+        if (count < MIN_RED_PIXELS) {
+            return WandDetectionResult(false, message = "Scanning… no red tip detected ($count px)")
         }
 
-        // 4. Bounding-box aspect-ratio gate
-        val minX = bx.min(); val maxX = bx.max()
-        val minY = by.min(); val maxY = by.max()
-        val bbW  = (maxX - minX).coerceAtLeast(1f)
-        val bbH  = (maxY - minY).coerceAtLeast(1f)
-        val ar   = if (bbW >= bbH) bbW / bbH else bbH / bbW
+        // ── 2. Centroid → tip coordinates ─────────────────────────────────
+        val tipXN = (sumX.toFloat() / count) / w
+        val tipYN = (sumY.toFloat() / count) / h
 
-        if (ar < MIN_ASPECT_RATIO) {
-            return WandDetectionResult(
-                false, confidence = 0.15f,
-                message = "Region not wand-shaped (AR ${"%.1f".format(ar)})"
-            )
-        }
+        // ── 3. Rough angle from bounding box ──────────────────────────────
+        val bbW   = (maxX - minX).coerceAtLeast(1)
+        val bbH   = (maxY - minY).coerceAtLeast(1)
+        val angle = if (bbW >= bbH) 0f else 90f   // horizontal vs vertical blob
 
-        // 5. Centroid
-        val cx = bx.average().toFloat()
-        val cy = by.average().toFloat()
+        val conf  = (count / CONFIDENCE_PIXELS).coerceIn(0.3f, 1.0f)
 
-        // 6. 2-D PCA: covariance matrix of the pixel cloud
-        var covXX = 0f; var covYY = 0f; var covXY = 0f
-        for (i in bx.indices) {
-            val dx = bx[i] - cx; val dy = by[i] - cy
-            covXX += dx * dx; covYY += dy * dy; covXY += dx * dy
-        }
-        val n = bx.size.toFloat()
-        covXX /= n; covYY /= n; covXY /= n
-
-        // Angle of principal axis (largest eigenvector)
-        val axisAngle = 0.5f * atan2(2f * covXY, covXX - covYY)
-        val axDx = cos(axisAngle)
-        val axDy = sin(axisAngle)
-
-        // 7. Project every point; keep the two extreme ends
-        var minProj = Float.MAX_VALUE; var maxProj = -Float.MAX_VALUE
-        var minPt = Pair(bx[0], by[0])
-        var maxPt = Pair(bx[0], by[0])
-
-        for (i in bx.indices) {
-            val proj = (bx[i] - cx) * axDx + (by[i] - cy) * axDy
-            if (proj < minProj) { minProj = proj; minPt = Pair(bx[i], by[i]) }
-            if (proj > maxProj) { maxProj = proj; maxPt = Pair(bx[i], by[i]) }
-        }
-
-        // 8. Convention: tip = the end higher in the frame (smaller Y)
-        val (tipPx, basePx) = if (minPt.second <= maxPt.second) Pair(minPt, maxPt)
-                               else                              Pair(maxPt, minPt)
-
-        val tipXN  = tipPx.first  / w
-        val tipYN  = tipPx.second / h
-        val baseXN = basePx.first  / w
-        val baseYN = basePx.second / h
-        val angleDeg = Math.toDegrees(axisAngle.toDouble()).toFloat()
-        val conf = (bx.size / CONFIDENCE_PIXELS).coerceIn(0.3f, 1.0f)
-
-        // 9. Push to history and recognise gesture
+        // ── 4. History + gesture recognition ──────────────────────────────
         val now = System.currentTimeMillis()
         posHistory.addLast(floatArrayOf(tipXN, tipYN, now.toFloat()))
         while (posHistory.size > HISTORY_MAX) posHistory.removeFirst()
@@ -172,63 +129,63 @@ class StickDetector(private val context: Context) {
 
         return WandDetectionResult(
             isDetected = true,
-            tipX  = tipXN,  tipY  = tipYN,
-            baseX = baseXN, baseY = baseYN,
-            angle = angleDeg,
+            tipX       = tipXN,
+            tipY       = tipYN,
+            angle      = angle,
             confidence = conf,
-            spell = spell,
-            message = "Wand $coordStr$spellStr"
+            spell      = spell,
+            message    = "Tip $coordStr  [${count}px]$spellStr"
         )
     }
 
     fun clearHistory() = posHistory.clear()
-
     fun close() { /* nothing to release */ }
 
     // ── Colour check ──────────────────────────────────────────────────────────
 
-    private fun isBrown(r: Int, g: Int, b: Int): Boolean {
+    private fun isRed(r: Int, g: Int, b: Int): Boolean {
         val rf = r / 255f; val gf = g / 255f; val bf = b / 255f
-        val maxC = maxOf(rf, gf, bf)
-        val minC = minOf(rf, gf, bf)
+        val maxC  = maxOf(rf, gf, bf)
+        val minC  = minOf(rf, gf, bf)
         val delta = maxC - minC
 
-        if (delta < 0.04f) return false   // nearly achromatic
+        if (delta < 0.04f) return false   // achromatic
 
-        val hue = when {
-            maxC == rf -> { var h = 60f * ((gf - bf) / delta); if (h < 0f) h += 360f; h }
-            maxC == gf ->   60f * ((bf - rf) / delta) + 120f
-            else        ->   60f * ((rf - gf) / delta) + 240f
-        }
+        // Only qualify if red is the dominant channel
+        if (maxC != rf) return false
+
         val sat = delta / maxC
-        val `val` = maxC
+        val v   = maxC
+        if (sat < SAT_MIN || v < VAL_MIN) return false
 
-        return hue in HUE_LO..HUE_HI && sat in SAT_LO..SAT_HI && `val` in VAL_LO..VAL_HI
+        // Hue in [0, HUE_RED_HI] or [HUE_RED_LO2, 360)
+        val hue = run {
+            var h = 60f * ((gf - bf) / delta)
+            if (h < 0f) h += 360f
+            h
+        }
+        return hue <= HUE_RED_HI || hue >= HUE_RED_LO2
     }
 
     // ── Gesture / spell recognition ───────────────────────────────────────────
 
     /**
-     * Simple trajectory classifier operating on recent tip positions.
-     *
-     * Spell mapping (each maps to a distinct Arduino action):
-     *   LUMOS            – left → right horizontal swipe  (lights on)
-     *   NOX              – right → left horizontal swipe  (lights off)
-     *   EXPELLIARMUS     – upward swipe (tip moves toward top of frame)
+     * Spell mapping:
+     *   LUMOS            – left → right swipe  (lights on)
+     *   NOX              – right → left swipe  (lights off)
+     *   EXPELLIARMUS     – upward swipe
      *   ACCIO            – downward swipe
      */
     private fun recogniseSpell(now: Long): String {
         val recent = posHistory.filter { now - it[2].toLong() < GESTURE_WINDOW_MS }
         if (recent.size < 8) return ""
 
-        val dX = recent.last()[0] - recent.first()[0]
-        val dY = recent.last()[1] - recent.first()[1]
+        val dX   = recent.last()[0] - recent.first()[0]
+        val dY   = recent.last()[1] - recent.first()[1]
         val dist = sqrt(dX * dX + dY * dY)
-
         if (dist < MIN_GESTURE_DIST) return ""
 
         val adX = abs(dX); val adY = abs(dY)
-
         return when {
             adX > adY * 1.5f && dX > 0  -> "LUMOS"
             adX > adY * 1.5f && dX < 0  -> "NOX"
