@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -27,14 +28,27 @@ import org.eclipse.paho.client.mqttv3.MqttMessage
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageFormat
+import android.graphics.Matrix
+import android.graphics.Rect
+import android.graphics.YuvImage
+import androidx.camera.core.ImageProxy
+import java.io.ByteArrayOutputStream
 
 class MainActivity : AppCompatActivity() {
     private lateinit var publishButton: MaterialButton
     private lateinit var cameraButton: MaterialButton
     private lateinit var statusText: TextView
     private lateinit var previewView: PreviewView
+    private lateinit var detectionIndicator: View
+    private lateinit var detectionStatusText: TextView
     private val mqttExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var imageCapture: ImageCapture? = null
+    private var imageAnalysis: ImageAnalysis? = null
+    private var stickDetector: StickDetector? = null
+    private var isStickDetectionEnabled = false
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -60,6 +74,8 @@ class MainActivity : AppCompatActivity() {
         cameraButton = findViewById(R.id.cameraButton)
         previewView = findViewById(R.id.previewView)
         statusText = findViewById(R.id.statusText)
+        detectionIndicator = findViewById(R.id.detectionIndicator)
+        detectionStatusText = findViewById(R.id.detectionStatusText)
 
         publishButton.setOnClickListener {
             publishSpell()
@@ -68,10 +84,14 @@ class MainActivity : AppCompatActivity() {
         cameraButton.setOnClickListener {
             openCamera()
         }
+        
+        // Initialize stick detector
+        stickDetector = StickDetector(this)
     }
 
     override fun onDestroy() {
         mqttExecutor.shutdownNow()
+        stickDetector?.close()
         super.onDestroy()
     }
 
@@ -166,20 +186,43 @@ class MainActivity : AppCompatActivity() {
             }
 
             imageCapture = ImageCapture.Builder().build()
+            
+            // Setup image analysis for stick detection
+            imageAnalysis = ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+            
+            imageAnalysis?.setAnalyzer(ContextCompat.getMainExecutor(this)) { imageProxy ->
+                if (isStickDetectionEnabled) {
+                    processImageForStickDetection(imageProxy)
+                } else {
+                    imageProxy.close()
+                }
+            }
 
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
             try {
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(
-                    this, cameraSelector, preview, imageCapture
+                    this, cameraSelector, preview, imageCapture, imageAnalysis
                 )
 
                 previewView.visibility = View.VISIBLE
                 statusText.text = "Camera ready - tap preview to capture"
 
                 previewView.setOnClickListener {
-                    capturePhoto()
+                    if (isStickDetectionEnabled) {
+                        isStickDetectionEnabled = false
+                        statusText.text = "Stick detection disabled"
+                        cameraButton.text = "Enable Stick Detection"
+                        updateDetectionIndicator(false)
+                    } else {
+                        isStickDetectionEnabled = true
+                        statusText.text = "Stick detection enabled - looking for wands..."
+                        cameraButton.text = "Disable Stick Detection"
+                        updateDetectionIndicator(false)
+                    }
                 }
 
             } catch (exc: Exception) {
@@ -220,6 +263,67 @@ class MainActivity : AppCompatActivity() {
         }
 
         return mediaDirectory?.takeIf { it.exists() } ?: filesDir
+    }
+    
+    private fun processImageForStickDetection(imageProxy: ImageProxy) {
+        val bitmap = imageProxyToBitmap(imageProxy)
+        imageProxy.close()
+        
+        bitmap?.let { bmp ->
+            val result = stickDetector?.detectStick(bmp)
+            
+            result?.let { detectionResult ->
+                runOnUiThread {
+                    if (detectionResult.isStickDetected) {
+                        statusText.text = detectionResult.message
+                        updateDetectionIndicator(true)
+                        // You could trigger MQTT here automatically if needed
+                        // publishSpell()
+                    } else {
+                        statusText.text = "Scanning... ${detectionResult.message}"
+                        updateDetectionIndicator(false)
+                    }
+                }
+            }
+        }
+    }
+    
+    private fun imageProxyToBitmap(imageProxy: ImageProxy): Bitmap? {
+        return try {
+            val buffer = imageProxy.planes[0].buffer
+            val bytes = ByteArray(buffer.remaining())
+            buffer.get(bytes)
+            
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            
+            // Rotate bitmap if needed based on camera rotation
+            val matrix = Matrix().apply {
+                postRotate(imageProxy.imageInfo.rotationDegrees.toFloat())
+            }
+            
+            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error converting image proxy to bitmap", e)
+            null
+        }
+    }
+    
+    private fun updateDetectionIndicator(isDetected: Boolean) {
+        if (isStickDetectionEnabled) {
+            if (isDetected) {
+                detectionIndicator.setBackgroundColor(getColor(android.R.color.holo_green_dark))
+                detectionStatusText.text = "Stick Detection: WAND DETECTED"
+                detectionStatusText.setTextColor(getColor(android.R.color.holo_green_dark))
+            } else {
+                detectionIndicator.setBackgroundColor(getColor(android.R.color.holo_orange_dark))
+                detectionStatusText.text = "Stick Detection: SCANNING"
+                detectionStatusText.setTextColor(getColor(android.R.color.holo_orange_dark))
+            }
+        } else {
+            detectionIndicator.setBackgroundColor(getColor(android.R.color.darker_gray))
+            detectionStatusText.text = "Stick Detection: OFF"
+            detectionStatusText.setTextColor(getColor(android.R.color.darker_gray))
+        }
     }
 
     companion object {
