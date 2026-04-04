@@ -2,8 +2,10 @@ package com.example.wandapplication
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.view.View
 import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,6 +15,7 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -29,10 +32,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var publishButton: MaterialButton
     private lateinit var cameraButton: MaterialButton
     private lateinit var statusText: TextView
+    private lateinit var previewView: PreviewView
     private val mqttExecutor: ExecutorService = Executors.newSingleThreadExecutor()
-    
     private var imageCapture: ImageCapture? = null
-    
+
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
@@ -55,12 +58,13 @@ class MainActivity : AppCompatActivity() {
 
         publishButton = findViewById(R.id.publishButton)
         cameraButton = findViewById(R.id.cameraButton)
+        previewView = findViewById(R.id.previewView)
         statusText = findViewById(R.id.statusText)
 
         publishButton.setOnClickListener {
             publishSpell()
         }
-        
+
         cameraButton.setOnClickListener {
             openCamera()
         }
@@ -135,6 +139,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openCamera() {
+        if (!packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) {
+            statusText.text = "No camera available on this device"
+            return
+        }
+
         when {
             ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED -> {
@@ -145,67 +154,72 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
-    
+
     private fun startCamera() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
-        
+
         cameraProviderFuture.addListener({
             val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
-            
+
             val preview = Preview.Builder().build().also {
-                it.setSurfaceProvider(findViewById<androidx.camera.view.PreviewView>(R.id.previewView)?.surfaceProvider)
+                it.setSurfaceProvider(previewView.surfaceProvider)
             }
-            
+
             imageCapture = ImageCapture.Builder().build()
-            
+
             val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-            
+
             try {
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(
                     this, cameraSelector, preview, imageCapture
                 )
-                
-                findViewById<androidx.camera.view.PreviewView>(R.id.previewView).visibility = android.view.View.VISIBLE
+
+                previewView.visibility = View.VISIBLE
                 statusText.text = "Camera ready - tap preview to capture"
-                
-                findViewById<androidx.camera.view.PreviewView>(R.id.previewView).setOnClickListener {
+
+                previewView.setOnClickListener {
                     capturePhoto()
                 }
-                
+
             } catch (exc: Exception) {
                 Log.e(TAG, "Use case binding failed", exc)
                 statusText.text = "Camera initialization failed"
             }
         }, ContextCompat.getMainExecutor(this))
     }
-    
+
     private fun capturePhoto() {
         val imageCapture = imageCapture ?: return
-        
-        val photoFile = java.io.File(
-            externalMediaDirs.firstOrNull(),
-            "wand_photo_${System.currentTimeMillis()}.jpg"
-        )
-        
+
+        val outputDirectory = getOutputDirectory()
+        val photoFile = java.io.File(outputDirectory, "wand_photo_${System.currentTimeMillis()}.jpg")
         val outputFileOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-        
+
         imageCapture.takePicture(
             outputFileOptions,
             ContextCompat.getMainExecutor(this),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    val savedUri = output.savedUri ?: android.net.Uri.fromFile(photoFile)
+                    val savedUri = output.savedUri ?: Uri.fromFile(photoFile)
                     statusText.text = "Photo saved: ${photoFile.name}"
                     Log.d(TAG, "Photo captured and saved: $savedUri")
                 }
-                
+
                 override fun onError(exception: ImageCaptureException) {
                     Log.e(TAG, "Photo capture failed", exception)
                     statusText.text = "Photo capture failed: ${exception.message}"
                 }
             }
         )
+    }
+
+    private fun getOutputDirectory(): java.io.File {
+        val mediaDirectory = externalMediaDirs.firstOrNull()?.let { mediaDir ->
+            java.io.File(mediaDir, "wand_photos").apply { mkdirs() }
+        }
+
+        return mediaDirectory?.takeIf { it.exists() } ?: filesDir
     }
 
     companion object {
