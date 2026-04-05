@@ -462,6 +462,9 @@
     </div>
   </div>
 
+  <audio id="sfx-push"  src="/media/push.mp3"  preload="auto" playsinline></audio>
+  <audio id="sfx-lumos" src="/media/lumos.mp3" preload="auto" playsinline></audio>
+
   <audio
     id="voice-line"
     preload="auto"
@@ -502,6 +505,18 @@
     const SPELL_LABELS = { '1': 'PUSH', '2': 'LUMOS' };
     const SPELL_CSS    = { 'PUSH': 'push', 'LUMOS': 'lumos' };
 
+    const sfx = {
+      PUSH:  document.getElementById('sfx-push'),
+      LUMOS: document.getElementById('sfx-lumos'),
+    };
+
+    function playSpellSfx(spell) {
+      const audio = sfx[spell];
+      if (!audio) return;
+      audio.currentTime = 0;
+      audio.play().catch(() => {});
+    }
+
     document.addEventListener('mousemove', event => {
       cursor.style.left = event.clientX + 'px';
       cursor.style.top = event.clientY + 'px';
@@ -513,6 +528,7 @@
     }
 
     function flashBanner(spell) {
+      playSpellSfx(spell);
       const css = SPELL_CSS[spell] || '';
       banner.className    = 'spell-banner ' + css;
       spellName.className = 'spell-name active ' + css;

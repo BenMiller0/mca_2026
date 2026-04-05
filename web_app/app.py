@@ -16,6 +16,7 @@ app = Flask(__name__, static_folder="assets", static_url_path="/assets")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 LEGACY_STATIC_DIR = Path(__file__).resolve().parent / "static"
+MEDIA_DIR = Path(__file__).resolve().parent / "media"
 
 # Each SSE client gets its own queue; broadcast pushes to all of them.
 _client_queues: list[queue.Queue] = []
@@ -87,6 +88,11 @@ def front():
 @app.route("/static/<path:filename>")
 def legacy_static(filename):
     return send_from_directory(LEGACY_STATIC_DIR, filename)
+
+
+@app.route("/media/<path:filename>")
+def media(filename):
+    return send_from_directory(MEDIA_DIR, filename)
 
 
 @app.route("/")
