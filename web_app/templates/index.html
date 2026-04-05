@@ -702,8 +702,7 @@
     preload="auto"
     playsinline
     src="{{ url_for('static', filename='open_sound_effect.mp3') }}"
-    ></audio>
-
+  ></audio>
 
   <script>
     // ── State machine: 'portal' → 'dashboard' → 'takeover' → 'portal' ─────────
@@ -748,6 +747,21 @@
       cursor.style.top  = e.clientY + 'px';
     });
 
+    // ── Unlock audio on first user interaction (required by browsers) ──────────
+    // SSE messages are not user gestures, so browsers block audio unless we
+    // prime every audio element during a real interaction first.
+    let audioUnlocked = false;
+    function unlockAudio() {
+      if (audioUnlocked) return;
+      audioUnlocked = true;
+      [openSound, themeTrack, voiceLine, sfx.PUSH, sfx.LUMOS].forEach(a => {
+        if (!a) return;
+        a.play().then(() => a.pause()).catch(() => {});
+      });
+    }
+    portalScreen.addEventListener('pointerdown', unlockAudio);
+    document.addEventListener('keydown', unlockAudio);
+
     // ── Portal canvas particles ────────────────────────────────────────────────
     (function initPortalParticles() {
       const ctx  = portalCanvas.getContext('2d');
@@ -765,8 +779,8 @@
           speed:  0.008 + Math.random() * 0.018,
           size:   1 + Math.random() * 2.5,
           alpha:  0.3 + Math.random() * 0.7,
-          drift:  (Math.random() - 0.5) * 0.3,   // slowly spiral inward
-          hue:    220 + Math.random() * 80,       // blue–purple range
+          drift:  (Math.random() - 0.5) * 0.3,
+          hue:    220 + Math.random() * 80,
         };
       }
 
@@ -872,9 +886,9 @@
 
     // ── portal → dashboard ────────────────────────────────────────────────────
     function openPortal() {
-      playOpenAudio();           // ← add this
+      playOpenAudio();
       portalScreen.classList.add('collapsing');
-      
+
       setTimeout(() => {
         portalScreen.classList.add('hidden');
         portalScreen.classList.remove('collapsing');
@@ -884,8 +898,8 @@
     }
 
     async function playOpenAudio() {
+      openSound.pause();
       openSound.currentTime = 0;
-      themeTrack.volume = 0.45;
       try {
         await openSound.play();
         await waitForAudioToFinish(openSound);
@@ -946,7 +960,7 @@
       setTimeout(() => {
         takeover.style.animation  = 'none';
         takeover.style.background = 'radial-gradient(ellipse at 50% 40%, #1c0000 0%, #050000 55%, #000 100%)';
-        connectPostTakeover();   // listen for any spell to escape
+        connectPostTakeover();
       }, 7000);
     }
 
@@ -955,7 +969,6 @@
       STATE = 'transitioning';
       closeES();
 
-      // Flash white, fade out takeover
       takeover.style.transition = 'opacity 0.3s ease';
       takeover.style.filter     = 'brightness(8) invert(1)';
       setTimeout(() => {
@@ -964,7 +977,6 @@
       }, 200);
 
       setTimeout(() => {
-        // Tear down takeover
         takeover.style.display = 'none';
         document.body.classList.remove('takeover-active');
         document.body.style.overflow = '';
@@ -982,7 +994,6 @@
         content.classList.remove('visible');
         decrees.forEach(d => d.classList.remove('visible'));
 
-        // Reset dashboard content
         banner.className    = 'spell-banner';
         spellName.className = 'spell-name';
         spellName.textContent = '—';
@@ -993,7 +1004,6 @@
         counter.textContent   = '';
         document.title        = 'Wand Spell Dashboard';
 
-        // Show portal again
         portalScreen.classList.remove('hidden');
         STATE = 'portal';
         connectPortal();
@@ -1012,7 +1022,7 @@
         const parts = event.data.split('|');
         if (parts.length < 3) return;
         const raw = parts[2];
-        if (raw === '4') { closeES(); openPortal(); }  // OPEN — web only, not Arduino
+        if (raw === '4') { closeES(); openPortal(); }
       };
       es.onerror = () => { es.close(); setTimeout(connectPortal, 3000); };
     }
@@ -1053,7 +1063,6 @@
 
     // ── Boot ───────────────────────────────────────────────────────────────────
     if (AUTO_TAKEOVER) {
-      // Came from /front redirect — skip portal, go straight to takeover
       portalScreen.classList.add('hidden');
       STATE = 'dashboard';
       runTakeover();
