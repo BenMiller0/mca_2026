@@ -3,6 +3,7 @@ package com.example.wandapplication
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
+import kotlin.math.pow
 
 /**
  * Detects a wand tip by looking for a small **red dot** affixed to its end.
@@ -68,11 +69,17 @@ class StickDetector(private val context: Context) {
     // ── Gesture state ─────────────────────────────────────────────────────────
 
     private val posHistory = ArrayDeque<FloatArray>()  // [normX, normY, timestampMs]
-    private val HISTORY_MAX       = 60
+    private val HISTORY_MAX       = 80    // ~2.7 s at 30 fps — enough to capture a full circle
 
-    private val EVAL_PERIOD_MS  = 1500L  // evaluate once every 1.5 seconds
-    private val GESTURE_MIN_DIFF = 0.15f // normalised units the averages must differ by
-    private var lastEvalTime    = 0L
+    private val EVAL_PERIOD_MS   = 1500L  // evaluate once every 1.5 seconds
+    private val GESTURE_MIN_DIFF = 0.15f  // normalised units the averages must differ by
+    private var lastEvalTime     = 0L
+
+    // Circle / SUMMON thresholds
+    private val CIRCLE_MIN_POINTS   = 15     // need at least this many samples
+    private val CIRCLE_MIN_RADIUS   = 0.07f  // centroid radius must span ≥ 7 % of frame
+    private val CIRCLE_MAX_CV       = 0.55f  // radius coefficient-of-variation < 55 %
+    private val CIRCLE_MAX_GAP_RAD  = kotlin.math.PI * 0.70  // largest uncovered arc < 126°
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -198,6 +205,50 @@ class StickDetector(private val context: Context) {
 
         val diffY = avgYLast - avgYFirst   // positive = moved downward
         val diffX = avgXLast - avgXFirst   // positive = moved rightward
+
+        // ── Circle check (SUMMON) must come first ──────────────────────────
+        // A circle starts and ends near the same point, so the half-average
+        // deltas stay small — but the tip sweeps all the way around.
+        if (window.size >= CIRCLE_MIN_POINTS) {
+            val centX = window.map { it[0] }.average().toFloat()
+            val centY = window.map { it[1] }.average().toFloat()
+
+            val radii = window.map { pt ->
+                kotlin.math.sqrt(
+                    ((pt[0] - centX).toDouble().pow(2) +
+                     (pt[1] - centY).toDouble().pow(2))
+                ).toFloat()
+            }
+            val meanRadius = radii.average().toFloat()
+
+            if (meanRadius > CIRCLE_MIN_RADIUS) {
+                val radiusCv = kotlin.math.sqrt(
+                    radii.map { (it - meanRadius).toDouble().pow(2) }.average()
+                ).toFloat() / meanRadius
+
+                if (radiusCv < CIRCLE_MAX_CV) {
+                    // Sort angles and find the largest angular gap in the sweep.
+                    val angles = window.map { pt ->
+                        kotlin.math.atan2(
+                            (pt[1] - centY).toDouble(),
+                            (pt[0] - centX).toDouble()
+                        )
+                    }.sorted()
+
+                    // Wrap-around gap between last and first angle
+                    var maxGap = angles.first() + 2 * kotlin.math.PI - angles.last()
+                    for (i in 0 until angles.size - 1) {
+                        val gap = angles[i + 1] - angles[i]
+                        if (gap > maxGap) maxGap = gap
+                    }
+
+                    if (maxGap < CIRCLE_MAX_GAP_RAD) {
+                        Log.d(TAG, "SUMMON: r=${"%.3f".format(meanRadius)} cv=${"%.2f".format(radiusCv)} maxGap=${"%.1f".format(Math.toDegrees(maxGap))}°")
+                        return "SUMMON"
+                    }
+                }
+            }
+        }
 
         return when {
             diffY >  GESTURE_MIN_DIFF && diffY > kotlin.math.abs(diffX) -> "PUSH"

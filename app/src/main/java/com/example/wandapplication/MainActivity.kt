@@ -268,6 +268,11 @@ class MainActivity : AppCompatActivity() {
                 voiceText.text = "Voice: LUMOS!"
                 publishSpell("2")
             }
+            "SUMMON" in text -> {
+                voiceLog(">>> SUMMON cast!")
+                voiceText.text = "Voice: SUMMON!"
+                publishSpell("3")
+            }
         }
     }
 
@@ -369,8 +374,9 @@ class MainActivity : AppCompatActivity() {
                 // Publish wand gesture only when the tip is tracked with strong confidence
                 if (result.spell.isNotEmpty() && result.confidence >= 0.7f) {
                     when (result.spell) {
-                        "PUSH"  -> publishSpell("1")
-                        "LUMOS" -> publishSpell("2")
+                        "PUSH"   -> publishSpell("1")
+                        "LUMOS"  -> publishSpell("2")
+                        "SUMMON" -> publishSpell("3")
                     }
                 }
             } else {

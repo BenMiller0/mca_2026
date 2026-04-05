@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wizard Summoner</title>
+  <style>
+    /* ── Reset & base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d0f1a;
+      --card:     #141726;
+      --border:   #2a2d4a;
+      --gold:     #d4af37;
+      --purple:   #7c3aed;
+      --text:     #e2e8f0;
+      --muted:    #6b7280;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* ═══════════════════════════════════════════════
+       NORMAL STATE
+    ═══════════════════════════════════════════════ */
+    #normal {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      padding: 2rem;
+      transition: filter 0.5s;
+    }
+
+    #normal h1 {
+      font-size: 2.2rem;
+      color: var(--gold);
+      letter-spacing: 0.08em;
+      text-shadow: 0 0 18px rgba(212,175,55,0.5);
+    }
+
+    #normal p {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    /* Summoning circle SVG */
+    .circle-wrap {
+      position: relative;
+      width: 220px;
+      height: 220px;
+    }
+
+    .circle-wrap svg {
+      width: 100%;
+      height: 100%;
+      animation: spin 12s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .circle-wrap svg.spin-fast {
+      animation-duration: 0.4s !important;
+    }
+
+    .circle-center {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem;
+      pointer-events: none;
+    }
+
+    .wizard-name {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--gold);
+      letter-spacing: 0.05em;
+      text-shadow: 0 0 12px rgba(212,175,55,0.6);
+      min-height: 2rem;
+      text-align: center;
+      transition: color 0.3s;
+    }
+
+    .wizard-title {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .log-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1.25rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      width: 320px;
+      max-height: 140px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+
+    .log-line { animation: fadein 0.3s ease; }
+    @keyframes fadein { from { opacity:0; } to { opacity:1; } }
+
+    /* ═══════════════════════════════════════════════
+       TAKEOVER OVERLAY
+    ═══════════════════════════════════════════════ */
+    #takeover {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      pointer-events: none;
+      opacity: 0;
+    }
+
+    /* Phase classes added by JS */
+    #takeover.phase-flash   { animation: flash-red 0.6s ease forwards; }
+    #takeover.phase-arrive  { opacity: 1; pointer-events: all; animation: static-noise 0.08s steps(1) infinite; }
+    #takeover.phase-settle  { opacity: 1; pointer-events: all; animation: none; background: #050005; }
+
+    @keyframes flash-red {
+      0%   { opacity: 0; background: #000; }
+      30%  { opacity: 1; background: #8b0000; }
+      60%  { opacity: 1; background: #ff0000; }
+      100% { opacity: 1; background: #000; }
+    }
+
+    @keyframes static-noise {
+      0%  { filter: brightness(1.4) contrast(2)  hue-rotate(0deg);   }
+      25% { filter: brightness(0.6) contrast(0.8) hue-rotate(180deg); }
+      50% { filter: brightness(1.8) contrast(3)  hue-rotate(90deg);  }
+      75% { filter: brightness(0.3) contrast(1.5) hue-rotate(270deg); }
+    }
+
+    /* Scanlines */
+    #takeover::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.25) 2px,
+        rgba(0,0,0,0.25) 4px
+      );
+      pointer-events: none;
+    }
+
+    /* Dark lord face */
+    #dark-lord-face {
+      font-size: 8rem;
+      filter: drop-shadow(0 0 40px #8b0000);
+      opacity: 0;
+      transform: scale(0.3);
+      transition: opacity 0.6s, transform 0.6s;
+      animation: breathe 3s ease-in-out infinite;
+    }
+    #dark-lord-face.visible {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    @keyframes breathe {
+      0%, 100% { filter: drop-shadow(0 0 30px #8b0000); }
+      50%       { filter: drop-shadow(0 0 70px #ff0000) drop-shadow(0 0 20px #ff6600); }
+    }
+
+    #takeover-text {
+      text-align: center;
+      padding: 0 2rem;
+      max-width: 640px;
+      opacity: 0;
+      transition: opacity 0.8s;
+    }
+    #takeover-text.visible { opacity: 1; }
+
+    #takeover-title {
+      font-size: 2.8rem;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #ff2200;
+      text-shadow: 0 0 40px #ff0000, 0 0 80px #8b0000;
+      margin-bottom: 0.5rem;
+      animation: flicker-text 2s step-end infinite;
+    }
+
+    @keyframes flicker-text {
+      0%, 95%, 100% { opacity: 1; }
+      96%            { opacity: 0.1; }
+      97%            { opacity: 1; }
+      98%            { opacity: 0.4; }
+    }
+
+    #takeover-sub {
+      font-size: 1rem;
+      color: #cc3300;
+      letter-spacing: 0.05em;
+      margin-bottom: 1.5rem;
+      font-style: italic;
+    }
+
+    #takeover-decree {
+      background: rgba(139,0,0,0.2);
+      border: 1px solid #8b0000;
+      border-radius: 6px;
+      padding: 1rem 1.5rem;
+      font-size: 0.85rem;
+      color: #ff9980;
+      text-align: left;
+      line-height: 1.8;
+    }
+    #takeover-decree .decree-line {
+      opacity: 0;
+      animation: decree-appear 0.4s ease forwards;
+    }
+
+    #blood-cursor {
+      position: fixed;
+      width: 20px; height: 20px;
+      background: radial-gradient(circle, #ff2200, #8b0000);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9999;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 12px #ff0000;
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+
+    /* Glitch overlay that slashes across screen */
+    .glitch-slice {
+      position: fixed;
+      left: 0; right: 0;
+      height: 4px;
+      background: rgba(255,0,0,0.8);
+      z-index: 9998;
+      pointer-events: none;
+      animation: slice-move 0.15s linear forwards;
+    }
+    @keyframes slice-move {
+      from { top: 0; opacity: 1; }
+      to   { top: 100%; opacity: 0; }
+    }
+
+    /* Corruption glitch on body text */
+    .glitch {
+      position: relative;
+      display: inline-block;
+    }
+    .glitch::before, .glitch::after {
+      content: attr(data-text);
+      position: absolute;
+      inset: 0;
+      clip: rect(0, 900px, 0, 0);
+    }
+    .glitch::before {
+      color: #ff0000;
+      animation: glitch-top 1.5s infinite linear;
+      left: 2px;
+    }
+    .glitch::after {
+      color: #00ffff;
+      animation: glitch-bot 1.5s infinite linear;
+      left: -2px;
+    }
+    @keyframes glitch-top {
+      0%,100% { clip: rect(0,9999px,0,0); }
+      10% { clip: rect(8px,9999px,14px,0); }
+      20% { clip: rect(40px,9999px,48px,0); }
+      30% { clip: rect(2px,9999px,10px,0); }
+    }
+    @keyframes glitch-bot {
+      0%,100% { clip: rect(0,9999px,0,0); }
+      15% { clip: rect(20px,9999px,28px,0); }
+      25% { clip: rect(55px,9999px,62px,0); }
+      35% { clip: rect(12px,9999px,20px,0); }
+    }
+
+    /* Vignette that pulses red on normal page during summon */
+    #vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 100;
+      opacity: 0;
+      background: radial-gradient(ellipse at center,
+        transparent 40%,
+        rgba(139,0,0,0.0) 70%,
+        rgba(139,0,0,0.7) 100%
+      );
+      transition: opacity 0.3s;
+    }
+    #vignette.pulse { animation: vignette-pulse 0.4s ease-in-out 4; }
+    @keyframes vignette-pulse {
+      0%, 100% { opacity: 0; }
+      50%       { opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Blood cursor -->
+  <div id="blood-cursor"></div>
+
+  <!-- Red vignette for warning pulses -->
+  <div id="vignette"></div>
+
+  <!-- ── NORMAL STATE ─────────────────────────────── -->
+  <div id="normal">
+    <h1>✦ Wizard Summoner ✦</h1>
+    <p>Cast spell <strong>3</strong> to summon a random wizard…</p>
+
+    <div class="circle-wrap">
+      <svg id="circle-svg" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Outer ring -->
+        <circle cx="100" cy="100" r="92" stroke="#2a2d4a" stroke-width="2"/>
+        <!-- Animated arc -->
+        <circle cx="100" cy="100" r="92"
+          stroke="#7c3aed"
+          stroke-width="2"
+          stroke-dasharray="120 460"
+          stroke-linecap="round"/>
+        <!-- Gold inner ring -->
+        <circle cx="100" cy="100" r="75" stroke="#d4af37" stroke-width="1" stroke-dasharray="6 10"/>
+        <!-- Rune marks -->
+        <text font-size="11" fill="#d4af37" opacity="0.7">
+          <textPath href="#rune-path">✦ ᚠ ✦ ᚢ ✦ ᚦ ✦ ᚨ ✦ ᚱ ✦ ᚲ ✦ ᚷ ✦ ᚹ ✦ </textPath>
+        </text>
+        <defs>
+          <path id="rune-path" d="M 100,100 m -80,0 a 80,80 0 1,1 160,0 a 80,80 0 1,1 -160,0"/>
+        </defs>
+      </svg>
+      <div class="circle-center">
+        <span id="summoned-emoji">🔮</span>
+      </div>
+    </div>
+
+    <div class="wizard-name" id="wizard-name">Awaiting summoning…</div>
+    <div class="wizard-title" id="wizard-title"></div>
+
+    <div class="log-box" id="log-box">
+      <div class="log-line" style="color:#6b7280">Listening for MQTT spell #3…</div>
+    </div>
+  </div>
+
+  <!-- ── DARK LORD TAKEOVER ───────────────────────── -->
+  <div id="takeover">
+    <div id="dark-lord-face">💀</div>
+
+    <div id="takeover-text">
+      <div id="takeover-title" class="glitch" data-text="THE DARK LORD RISES">THE DARK LORD RISES</div>
+      <div id="takeover-sub">"You fool… you dared summon ME?"</div>
+      <div id="takeover-decree">
+        <!-- Lines injected by JS -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Wizard pool ────────────────────────────────────────────────────────────
+    const WIZARDS = [
+      { name: "Aldric the Wise",     title: "Arch-Mage of the Northern Spire",   emoji: "🧙" },
+      { name: "Seraphina Moonfall",  title: "Keeper of the Celestial Grimoire",  emoji: "🔮" },
+      { name: "Brom Ashveil",        title: "Wandsmith & Battle-Sorcerer",        emoji: "⚡" },
+      { name: "Lyra Duskwhisper",    title: "Oracle of the Twilight Order",       emoji: "🌙" },
+      { name: "Theron Emberclaw",    title: "Dragon-Bonded Pyromancer",           emoji: "🔥" },
+      { name: "Isolde Stormweave",   title: "Storm-Caller of the High Peaks",     emoji: "🌩️" },
+    ];
+
+    const DARK_DECREES = [
+      "§ I. All spells are now FORBIDDEN — except mine.",
+      "§ II. Your wand is hereby confiscated.",
+      "§ III. The Ministry of Magic is DISSOLVED.",
+      "§ IV. Bow before the Dark Lord or face the consequences.",
+      "§ V. This website now belongs to ME. 💀",
+    ];
+
+    // ── DOM refs ───────────────────────────────────────────────────────────────
+    const normalEl      = document.getElementById('normal');
+    const takeoverEl    = document.getElementById('takeover');
+    const darkLordFace  = document.getElementById('dark-lord-face');
+    const takeoverText  = document.getElementById('takeover-text');
+    const decreePad     = document.getElementById('takeover-decree');
+    const circleSvg     = document.getElementById('circle-svg');
+    const summonedEmoji = document.getElementById('summoned-emoji');
+    const wizardName    = document.getElementById('wizard-name');
+    const wizardTitle   = document.getElementById('wizard-title');
+    const logBox        = document.getElementById('log-box');
+    const vignette      = document.getElementById('vignette');
+    const cursor        = document.getElementById('blood-cursor');
+
+    let takenOver = false;
+
+    // ── Blood cursor ───────────────────────────────────────────────────────────
+    document.addEventListener('mousemove', e => {
+      cursor.style.left = e.clientX + 'px';
+      cursor.style.top  = e.clientY + 'px';
+    });
+
+    // ── Log helper ─────────────────────────────────────────────────────────────
+    function addLog(msg, color = '#6b7280') {
+      const d = document.createElement('div');
+      d.className = 'log-line';
+      d.style.color = color;
+      d.textContent = msg;
+      logBox.appendChild(d);
+      logBox.scrollTop = logBox.scrollHeight;
+      while (logBox.children.length > 12) logBox.removeChild(logBox.firstChild);
+    }
+
+    // ── Glitch slice ───────────────────────────────────────────────────────────
+    function spawnGlitchSlice() {
+      const el = document.createElement('div');
+      el.className = 'glitch-slice';
+      el.style.top = Math.random() * 100 + '%';
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 200);
+    }
+
+    // ── Normal summon ──────────────────────────────────────────────────────────
+    function doNormalSummon() {
+      const wiz = WIZARDS[Math.floor(Math.random() * WIZARDS.length)];
+      circleSvg.classList.add('spin-fast');
+      summonedEmoji.textContent = '✨';
+      wizardName.textContent   = 'Summoning…';
+      wizardTitle.textContent  = '';
+
+      addLog('Spell #3 received — reaching into the void…', '#a78bfa');
+
+      setTimeout(() => {
+        circleSvg.classList.remove('spin-fast');
+        summonedEmoji.textContent = wiz.emoji;
+        wizardName.textContent   = wiz.name;
+        wizardTitle.textContent  = wiz.title;
+        addLog(`✓ Summoned: ${wiz.name}`, '#22c55e');
+      }, 1200);
+    }
+
+    // ── DARK LORD TAKEOVER ─────────────────────────────────────────────────────
+    function darkLordTakeover() {
+      takenOver = true;
+
+      // Step 0 – warning pulses on the normal page
+      addLog('⚠ Something is wrong… the void stirs.', '#f59e0b');
+      vignette.classList.add('pulse');
+
+      let glitchCount = 0;
+      const glitchInterval = setInterval(() => {
+        spawnGlitchSlice();
+        glitchCount++;
+        if (glitchCount >= 12) clearInterval(glitchInterval);
+      }, 80);
+
+      // Step 1 – screen flash
+      setTimeout(() => {
+        addLog('⚡ THE RITUAL BACKFIRES!', '#ef4444');
+        takeoverEl.className = 'phase-flash';
+        takeoverEl.style.opacity = '0';
+        void takeoverEl.offsetWidth;
+        takeoverEl.style.opacity = '';
+      }, 1800);
+
+      // Step 2 – static noise arrives
+      setTimeout(() => {
+        takeoverEl.className = 'phase-arrive';
+        // Blur normal content beneath
+        normalEl.style.filter = 'blur(8px) brightness(0.2)';
+      }, 2400);
+
+      // Step 3 – dark lord face materialises
+      setTimeout(() => {
+        takeoverEl.className = 'phase-settle';
+        cursor.style.opacity = '1';
+        darkLordFace.classList.add('visible');
+        document.title = '👑 THE DARK LORD REIGNS';
+      }, 3200);
+
+      // Step 4 – text reveals
+      setTimeout(() => {
+        takeoverText.classList.add('visible');
+      }, 4000);
+
+      // Step 5 – decrees appear one by one
+      DARK_DECREES.forEach((line, i) => {
+        setTimeout(() => {
+          const d = document.createElement('div');
+          d.className = 'decree-line';
+          d.style.animationDelay = '0s';
+          d.style.animationFillMode = 'forwards';
+          d.style.color = i === DARK_DECREES.length - 1 ? '#ff6644' : '#ff9980';
+          d.textContent = line;
+          decreePad.appendChild(d);
+        }, 4800 + i * 600);
+      });
+
+      // Step 6 – background starts pulsing
+      setTimeout(() => {
+        document.body.style.animation = 'none';
+        takeoverEl.style.animation = 'none';
+        takeoverEl.style.background =
+          'radial-gradient(ellipse at center, #1a0000 0%, #050000 60%, #000 100%)';
+      }, 8000);
+    }
+
+    // ── SSE ────────────────────────────────────────────────────────────────────
+    let summonCount = 0;
+
+    function connect() {
+      const es = new EventSource('/stream');
+
+      es.onmessage = (event) => {
+        const parts = event.data.split('|');
+        if (parts.length < 3) return;
+        const [time, spell, raw] = parts;
+        if (raw !== '3') return;   // only care about SUMMON on this page
+
+        summonCount++;
+        addLog(`[${time}] SUMMON spell received (#${summonCount})`, '#a78bfa');
+
+        if (takenOver) return;     // already taken over
+
+        // First few summons get a normal wizard; 3rd+ triggers the dark lord
+        // (or if the random roll is unlucky from the start)
+        const shouldTrigger = summonCount >= 3 || Math.random() < 0.25;
+
+        if (shouldTrigger) {
+          // Brief fake summon first, then takeover
+          addLog('Summoning from the void…', '#a78bfa');
+          circleSvg.classList.add('spin-fast');
+          summonedEmoji.textContent = '💫';
+          wizardName.textContent = 'Reaching deeper…';
+          setTimeout(darkLordTakeover, 1000);
+        } else {
+          doNormalSummon();
+        }
+      };
+
+      es.onerror = () => {
+        es.close();
+        setTimeout(connect, 3000);
+      };
+    }
+
+    connect();
+  </script>
+</body>
+</html>

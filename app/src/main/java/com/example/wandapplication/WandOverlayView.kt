@@ -85,6 +85,16 @@ class WandOverlayView @JvmOverloads constructor(
         if (spell.isNotEmpty()) {
             spellText = spell
             spellAlpha = 255
+            spellPaint.color = when (spell) {
+                "SUMMON" -> Color.argb(255, 180, 80, 255)   // dark purple
+                "LUMOS"  -> Color.argb(255, 255, 230, 100)  // warm gold
+                else     -> Color.WHITE                       // PUSH = white
+            }
+            spellPaint.setShadowLayer(10f, 0f, 0f, when (spell) {
+                "SUMMON" -> Color.argb(200, 100, 0, 200)
+                "LUMOS"  -> Color.argb(180, 255, 165, 0)
+                else     -> Color.argb(180, 255, 165, 0)
+            })
         } else {
             // Fade out existing spell label
             spellAlpha = (spellAlpha - 6).coerceAtLeast(0)

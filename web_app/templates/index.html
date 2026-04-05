@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wand Spell Dashboard</title>
+  <style>
+    :root {
+      --bg:        #0d0d1a;
+      --card:      #151528;
+      --border:    #2a2a50;
+      --gold:      #d4af37;
+      --purple:    #7c3aed;
+      --blue:      #3b82f6;
+      --green:     #22c55e;
+      --red:       #ef4444;
+      --text:      #e2e8f0;
+      --muted:     #6b7280;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    h1 {
+      font-size: 2rem;
+      color: var(--gold);
+      letter-spacing: 0.08em;
+      text-shadow: 0 0 20px rgba(212,175,55,0.5);
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 2rem;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 1rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 2rem;
+      width: 100%;
+      max-width: 700px;
+    }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .dot.connected  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot.error      { background: var(--red);   box-shadow: 0 0 6px var(--red);   }
+
+    /* Spell flash banner */
+    .spell-banner {
+      width: 100%;
+      max-width: 700px;
+      border-radius: 12px;
+      border: 2px solid var(--border);
+      background: var(--card);
+      padding: 2rem;
+      text-align: center;
+      margin-bottom: 2rem;
+      transition: border-color 0.3s, box-shadow 0.3s;
+      min-height: 140px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .spell-name {
+      font-size: 3rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      opacity: 0.2;
+      transition: opacity 0.2s, color 0.2s, text-shadow 0.2s;
+    }
+    .spell-name.active {
+      opacity: 1;
+    }
+    .spell-name.push {
+      color: var(--blue);
+      text-shadow: 0 0 30px rgba(59,130,246,0.7);
+    }
+    .spell-name.lumos {
+      color: var(--gold);
+      text-shadow: 0 0 30px rgba(212,175,55,0.9);
+    }
+    .spell-banner.push  { border-color: var(--blue);   box-shadow: 0 0 40px rgba(59,130,246,0.2); }
+    .spell-banner.lumos { border-color: var(--gold);   box-shadow: 0 0 40px rgba(212,175,55,0.2); }
+
+    .spell-sub {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 0.5rem;
+    }
+
+    /* Event log */
+    h2 {
+      font-size: 0.9rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.75rem;
+      align-self: flex-start;
+      max-width: 700px;
+      width: 100%;
+    }
+
+    #log {
+      width: 100%;
+      max-width: 700px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .log-entry {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.85rem;
+      animation: slide-in 0.2s ease;
+    }
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-time  { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
+    .log-spell { font-weight: 600; }
+    .log-spell.push  { color: var(--blue); }
+    .log-spell.lumos { color: var(--gold); }
+    .log-raw   { color: var(--muted); font-size: 0.75rem; margin-left: auto; }
+
+    .empty-state { color: var(--muted); font-size: 0.85rem; text-align: center; padding: 2rem; }
+
+    .counter {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>✦ Wand Dashboard</h1>
+  <p class="subtitle">MQTT broker: {{ broker }}:{{ port }} &nbsp;|&nbsp; topic: <code>{{ topic }}</code></p>
+
+  <div class="status-bar">
+    <span class="dot" id="dot"></span>
+    <span id="status-text">Connecting…</span>
+  </div>
+
+  <div class="spell-banner" id="banner">
+    <div class="spell-name" id="spell-name">—</div>
+    <div class="spell-sub" id="spell-sub">Waiting for a spell…</div>
+  </div>
+
+  <h2>Event Log</h2>
+  <div id="log"><div class="empty-state">No spells received yet.</div></div>
+  <div class="counter" id="counter"></div>
+
+  <script>
+    const dot        = document.getElementById('dot');
+    const statusText = document.getElementById('status-text');
+    const banner     = document.getElementById('banner');
+    const spellName  = document.getElementById('spell-name');
+    const spellSub   = document.getElementById('spell-sub');
+    const log        = document.getElementById('log');
+    const counter    = document.getElementById('counter');
+
+    let totalCount = 0;
+    let flashTimer = null;
+
+    const SPELL_LABELS = { '1': 'PUSH', '2': 'LUMOS' };
+    const SPELL_CSS    = { 'PUSH': 'push', 'LUMOS': 'lumos' };
+
+    function setStatus(connected, text) {
+      dot.className  = 'dot ' + (connected ? 'connected' : 'error');
+      statusText.textContent = text;
+    }
+
+    function flashBanner(spell) {
+      const css = SPELL_CSS[spell] || '';
+      banner.className    = 'spell-banner ' + css;
+      spellName.className = 'spell-name active ' + css;
+      spellName.textContent = spell;
+      spellSub.textContent  = spell === 'PUSH'  ? 'Wingardium Leviosa!' :
+                              spell === 'LUMOS' ? 'Let there be light!'  :
+                              'Unknown spell';
+
+      clearTimeout(flashTimer);
+      flashTimer = setTimeout(() => {
+        banner.className    = 'spell-banner';
+        spellName.className = 'spell-name';
+      }, 3000);
+    }
+
+    function addLog(time, spell, raw) {
+      // Remove empty-state placeholder
+      const empty = log.querySelector('.empty-state');
+      if (empty) empty.remove();
+
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML =
+        `<span class="log-time">${time}</span>` +
+        `<span class="log-spell ${(SPELL_CSS[spell] || '').toLowerCase()}">${spell}</span>` +
+        `<span class="log-raw">payload=${raw}</span>`;
+
+      log.insertBefore(entry, log.firstChild);
+
+      // Keep only 100 entries
+      while (log.children.length > 100) log.removeChild(log.lastChild);
+
+      totalCount++;
+      counter.textContent = `Total spells received: ${totalCount}`;
+    }
+
+    // ── SSE ──────────────────────────────────────────────────────────────────
+    function connect() {
+      setStatus(false, 'Connecting to server…');
+      const es = new EventSource('/stream');
+
+      es.onopen = () => setStatus(true, 'Connected — listening for spells');
+
+      es.onmessage = (event) => {
+        // format: "HH:MM:SS|SPELL|rawPayload"
+        const parts = event.data.split('|');
+        if (parts.length < 3) return;
+        const [time, spell, raw] = parts;
+        flashBanner(spell);
+        addLog(time, spell, raw);
+      };
+
+      es.onerror = () => {
+        setStatus(false, 'Connection lost — retrying…');
+        es.close();
+        setTimeout(connect, 3000);
+      };
+    }
+
+    connect();
+  </script>
+</body>
+</html>
