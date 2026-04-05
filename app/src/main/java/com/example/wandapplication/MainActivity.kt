@@ -273,6 +273,12 @@ class MainActivity : AppCompatActivity() {
                 voiceText.text = "Voice: SUMMON!"
                 publishSpell("3")
             }
+            "OPEN" in text -> {
+                voiceLog(">>> OPEN cast!")
+                voiceText.text = "Voice: OPEN!"
+                // Payload "4" is not handled by the Arduino — web only
+                publishSpell("4")
+            }
         }
     }
 
