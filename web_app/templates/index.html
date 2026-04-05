@@ -171,6 +171,57 @@
       margin-top: 1rem;
     }
 
+    .spells-panel {
+      width: 100%;
+      max-width: 700px;
+      margin-bottom: 2rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.1rem 1.2rem;
+    }
+
+    .spells-list {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    .spell-item {
+      display: grid;
+      grid-template-columns: 110px 1fr;
+      gap: 0.9rem;
+      align-items: start;
+      padding: 0.75rem 0.85rem;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .spell-label {
+      font-size: 0.92rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .spell-label.lumos {
+      color: var(--gold);
+    }
+
+    .spell-label.push {
+      color: var(--blue);
+    }
+
+    .spell-label.summon {
+      color: #f87171;
+    }
+
+    .spell-description {
+      color: var(--text);
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+
     #dashboard-shell {
       width: 100%;
       display: flex;
@@ -436,6 +487,24 @@
     <div class="spell-banner" id="banner">
       <div class="spell-name" id="spell-name">—</div>
       <div class="spell-sub" id="spell-sub">Waiting for a spell…</div>
+    </div>
+
+    <div class="spells-panel">
+      <h2>Known Spells</h2>
+      <div class="spells-list">
+        <div class="spell-item">
+          <div class="spell-label lumos">Lumos</div>
+          <div class="spell-description">Turn on an LED</div>
+        </div>
+        <div class="spell-item">
+          <div class="spell-label push">Push</div>
+          <div class="spell-description">Knock over a cup</div>
+        </div>
+        <div class="spell-item">
+          <div class="spell-label summon">Summon</div>
+          <div class="spell-description">Summon a random wizard</div>
+        </div>
+      </div>
     </div>
 
     <h2>Event Log</h2>
