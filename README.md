@@ -1,29 +1,29 @@
-# Wand — Qualcomm Multiverse Hackathon 2026
+# Muggle Wand Training — ACM Hackathon 2026
 
-> *"Any sufficiently advanced technology is indistinguishable from magic."*
+> *"Simulating real spells using Edge-AI."*
 
-A Harry Potter-themed, multi-device AI experience built for the **Qualcomm Multiverse** hackathon track. The challenge: build an intelligent application that distributes inference and control across multiple Snapdragon-powered devices rather than running everything on a single chip.
+A Harry Potter-themed, multi-device AI experience built for the **Qualcomm Multiverse** hackathon track. An intelligent application that distributes inference and control across multiple Snapdragon-powered devices.
 
 We used two Snapdragon devices:
-- **Samsung Galaxy S25 Ultra** — edge AI inference (gesture + voice recognition)
-- **Arduino UNO Q** — real-time physical actuation (LEDs, servo, LED matrix)
+- **Samsung Galaxy S25 Ultra**: edge AI inference (gesture & voice recognition)
+- **Arduino UNO Q**: real-time physical actuation (LEDs, servo, & LED matrix)
 
-The result: point a wand at the phone's camera, cast a gesture or speak a spell name, and watch physical objects move and lights change — as if by magic.
+The result: With your wand, cast a gesture and shout a spell name, watch physical objects move and lights change, as if you are performing magic in real life.
 
 ---
 
 ## The Concept
 
-Traditional wand toys are self-contained. This system is different — the intelligence is split across devices the same way a real distributed system splits compute:
+This system has intelligence split across devices the same way a real distributed system splits compute:
 
-| Concern | Device | Why here |
+| Task | Device | Reasoning |
 |---------|--------|----------|
-| Computer vision & NLP | Samsung Galaxy S25 Ultra | On-device Snapdragon NPU handles real-time camera + voice inference with no cloud latency |
-| Message routing | UNO Q Linux core | Runs a full Mosquitto MQTT broker — acts as the network hub |
-| Physical actuation | UNO Q MCU core | Hard real-time control of servo, LEDs, LED matrix |
-| Spell event display | Flask web app | Any browser on the local network can watch spells being cast live |
+| Computer vision & NLP | Samsung Galaxy S25 Ultra | Snapdragon NPU handles real-time camera & voice inference |
+| Message routing | UNO Q Linux core | Runs a full Mosquitto MQTT broker, acting as a network hub |
+| Physical actuation | UNO Q MCU core | Real-time control of servo, LEDs, LED matrix |
+| Spell event display | Flask web app | Any browser on the local network can display spells being cast live |
 
-The two Snapdragon devices communicate over a shared Wi-Fi network (iPhone hotspot) using MQTT — a lightweight pub/sub protocol designed for exactly this kind of constrained, low-latency IoT messaging.
+The two Snapdragon devices communicate over a shared Wi-Fi network (iPhone hotspot) using MQTT, a lightweight publish and subscriber protocol designed for exactly this kind of IoT messaging.
 
 ---
 
@@ -66,20 +66,20 @@ The two Snapdragon devices communicate over a shared Wi-Fi network (iPhone hotsp
            └──────────────────────────────┘
 ```
 
-The UNO Q is the only device on the network that is both a message broker *and* a physical actuator — its Linux core handles networking and routing while its MCU core drives hardware in real time.
+The UNO Q is the only device on the network that is both a message broker *and* a physical actuator, its Linux core handles networking and routing while its MCU core drives hardware in real time.
 
 ---
 
 ## Spells
 
-Spells can be cast two ways simultaneously: **gesture** (wand + camera) or **voice** (just say the spell name).
+Spells can be casted by: **gesture** (waving the wand at the camera) and **voice** (shouting the spell name) at the same time.
 
 | # | Gesture | Voice | Spell | Physical Effect |
 |---|---------|-------|-------|-----------------|
-| 1 | Swipe wand downward | *"Push"* | **PUSH / Stupefy** | Lightning bolt flashes on LED matrix 3×, cup LED strobes, servo sweeps 0→180→0° |
-| 2 | Swipe wand rightward | *"Lumos"* | **LUMOS / NOX** | Toggles red LED and glow pixel art on the matrix (toggle — cast again to extinguish) |
-| 3 | Draw a circle with the wand | *"Summon"* | **SUMMON / Voldemort** | Skull pixel art flashes 5×, then the matrix enters chaotic "Voldemort mode" for ~35 s |
-| 4 | — | *"Open"* | **OPEN** | Logged and displayed in the web app; extend the Arduino sketch to add a physical effect |
+| 1 | Swipe wand downward | *"Push"* | **PUSH** | Servo sweeps 0→180→0° knocking down objects on a table. |
+| 2 | Swipe wand rightward | *"Lumos"* | **LUMOS** | Toggles red LED On & Off. |
+| 3 | Draw a circle with the wand | *"Summon"* | **SUMMON** | Flashes the website page and spawns Voldemort. |
+| 4 | — | *"Open"* | **OPEN** | Logs and Displays spells on the web app as well as plays sound effects. |
 
 ---
 
