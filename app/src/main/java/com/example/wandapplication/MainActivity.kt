@@ -258,9 +258,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleVoiceSpell(text: String) {
         when {
-            "STUPEFY" in text -> {
-                voiceLog(">>> STUPEFY cast!")
-                voiceText.text = "Voice: STUPEFY!"
+            "PUSH" in text -> {
+                voiceLog(">>> PUSH cast!")
+                voiceText.text = "Voice: PUSH!"
                 publishSpell("1")
             }
             "LUMOS" in text -> {
