@@ -200,7 +200,7 @@ class StickDetector(private val context: Context) {
         val diffX = avgXLast - avgXFirst   // positive = moved rightward
 
         return when {
-            diffY >  GESTURE_MIN_DIFF && diffY > kotlin.math.abs(diffX) -> "STUPEFY"
+            diffY >  GESTURE_MIN_DIFF && diffY > kotlin.math.abs(diffX) -> "PUSH"
             diffX >  GESTURE_MIN_DIFF && diffX > kotlin.math.abs(diffY) -> "LUMOS"
             else -> ""
         }

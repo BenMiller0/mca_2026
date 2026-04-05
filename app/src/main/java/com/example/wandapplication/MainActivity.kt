@@ -258,9 +258,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleVoiceSpell(text: String) {
         when {
-            "STUPEFY" in text -> {
-                voiceLog(">>> STUPEFY cast!")
-                voiceText.text = "Voice: STUPEFY!"
+            "PUSH" in text -> {
+                voiceLog(">>> PUSH cast!")
+                voiceText.text = "Voice: PUSH!"
                 publishSpell("1")
             }
             "LUMOS" in text -> {
@@ -366,10 +366,12 @@ class MainActivity : AppCompatActivity() {
                 updateIndicator(true)
                 statusText.text = result.message
 
-                // Auto-publish when a wand gesture spell is recognised
-                when (result.spell) {
-                    "STUPEFY" -> publishSpell("1")
-                    "LUMOS"   -> publishSpell("2")
+                // Publish wand gesture only when the tip is tracked with strong confidence
+                if (result.spell.isNotEmpty() && result.confidence >= 0.7f) {
+                    when (result.spell) {
+                        "PUSH"  -> publishSpell("1")
+                        "LUMOS" -> publishSpell("2")
+                    }
                 }
             } else {
                 wandOverlay.clearWand()
