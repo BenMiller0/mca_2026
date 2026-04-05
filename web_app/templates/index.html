@@ -671,7 +671,89 @@
         takeover.style.animation = 'none';
         takeover.style.background =
           'radial-gradient(ellipse at 50% 40%, #1c0000 0%, #050000 55%, #000 100%)';
+        // Now that takeover is fully settled, reconnect SSE to listen for escape spell
+        connectPostTakeover();
       }, 7000);
+    }
+
+    // ── Reset / escape the takeover ───────────────────────────────────────────
+    function resetPage() {
+      // Flash white, then sweep everything away
+      takeover.style.transition = 'opacity 0.3s ease';
+      takeover.style.filter = 'brightness(8) invert(1)';
+
+      setTimeout(() => {
+        takeover.style.transition = 'opacity 0.6s ease';
+        takeover.style.opacity = '0';
+      }, 200);
+
+      setTimeout(() => {
+        // Hide takeover fully
+        takeover.style.display = 'none';
+
+        // Restore dashboard
+        document.body.classList.remove('takeover-active');
+        document.body.style.overflow = '';
+        dashboard.style.filter = '';
+        dashboard.style.transform = '';
+
+        // Reset cursor
+        cursor.style.opacity = '0';
+
+        // Reset title & status
+        document.title = 'Wand Spell Dashboard';
+        setStatus(true, 'Connected — listening for spells');
+        dot.style.background = '';
+        dot.style.boxShadow = '';
+
+        // Reset banner
+        banner.className = 'spell-banner';
+        spellName.className = 'spell-name';
+        spellName.textContent = '—';
+        spellSub.textContent = 'Waiting for a spell…';
+        spellSub.style.color = '';
+
+        // Clear log and counter
+        log.innerHTML = '<div class="empty-state">No spells received yet.</div>';
+        totalCount = 0;
+        counter.textContent = '';
+
+        // Reset vignette
+        vignette.classList.remove('pulse');
+
+        // Stop takeover audio
+        themeTrack.pause();
+        themeTrack.currentTime = 0;
+
+        // Reset takeover element for potential re-use
+        takeoverActive = false;
+        takeover.className = '';
+        takeover.removeAttribute('style');
+        voldemortImg.classList.remove('visible');
+        content.classList.remove('visible');
+        decrees.forEach(d => d.classList.remove('visible'));
+
+        // Reconnect normal SSE
+        connect();
+      }, 800);
+    }
+
+    // ── SSE after takeover — listens for any spell to escape ─────────────────
+    function connectPostTakeover() {
+      const es = new EventSource('/stream');
+
+      es.onmessage = (event) => {
+        const parts = event.data.split('|');
+        if (parts.length < 3) return;
+        es.close();
+        resetPage();
+      };
+
+      es.onerror = () => {
+        es.close();
+        // Retry in case of disconnect
+        setTimeout(connectPostTakeover, 3000);
+      };
     }
 
     // ── SSE ──────────────────────────────────────────────────────────────────
