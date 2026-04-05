@@ -1,14 +1,19 @@
-# Wand — Qualcomm Multiverse Hackathon 2026
+# Muggle Wand Training - Qualcomm Multiverse Hackathon 2026
 
 > *"Any sufficiently advanced technology is indistinguishable from magic."*
 
 A Harry Potter-themed, multi-device AI experience built for the **Qualcomm Multiverse** hackathon track. The challenge: build an intelligent application that distributes inference and control across multiple Snapdragon-powered devices rather than running everything on a single chip.
+
+DEMO VIDEO: (https://youtu.be/m5UrVXUDBwA) [https://youtu.be/m5UrVXUDBwA]
 
 We used two Snapdragon devices:
 - **Samsung Galaxy S25 Ultra** — edge AI inference (gesture + voice recognition)
 - **Arduino UNO Q** — real-time physical actuation (LEDs, servo, LED matrix)
 
 The result: point a wand at the phone's camera, cast a gesture or speak a spell name, and watch physical objects move and lights change — as if by magic.
+
+## Team
+Benjamin Miller, Shawn Cheng, Mitchell Moundraty, Eric Wang
 
 ---
 
@@ -32,7 +37,7 @@ The two Snapdragon devices communicate over a shared Wi-Fi network (iPhone hotsp
 ```
 ┌─────────────────────────────────────────────────────┐
 │           Samsung Galaxy S25 Ultra                  │
-│                                                     │
+│                                                     │ 
 │  Camera  ──►  StickDetector (CV)  ──►  Spell ID     │
 │  Mic     ──►  SpeechRecognizer    ──►  Spell ID     │
 │                       │                             │
@@ -40,7 +45,7 @@ The two Snapdragon devices communicate over a shared Wi-Fi network (iPhone hotsp
 └───────────────────────┼─────────────────────────────┘
                         │  Wi-Fi  (iPhone hotspot)
                         ▼
-┌─────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────┐    
 │              Arduino UNO Q — Linux core             │
 │                                                     │
 │   Mosquitto MQTT broker  (port 1883)                │
@@ -52,18 +57,19 @@ The two Snapdragon devices communicate over a shared Wi-Fi network (iPhone hotsp
 ┌───────────▼─────────────────────────────────────────┐
 │              Arduino UNO Q — MCU core               │
 │                                                     │
-│   sketch.ino  ──►  LED matrix  (8×12 pixel art)    │
+│   sketch.ino  ──►  LED matrix  (8×12 pixel art)     │
 │               ──►  Servo motor  (pin 9)             │
 │               ──►  Red LED      (pin 10)            │
 │               ──►  Cup LED      (pin 11)            │
 └─────────────────────────────────────────────────────┘
 
-           ┌──────────────────────────────┐
-           │   Flask web app (any device) │
-           │   Subscribes to MQTT broker  │
-           │   Streams events via SSE     │
-           │   Browser shows live log     │
-           └──────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│              Flask web app (any device)             │
+│                                                     │
+│   Subscribes to MQTT broker (port 1883)             │
+│   Streams events via SSE                            │
+│   Browser shows live log                            │
+└─────────────────────────────────────────────────────┘
 ```
 
 The UNO Q is the only device on the network that is both a message broker *and* a physical actuator — its Linux core handles networking and routing while its MCU core drives hardware in real time.
@@ -98,6 +104,7 @@ The Android app runs a custom computer vision pipeline entirely on-device, using
    - At least 8 red pixels must form a blob (noise rejection)
 4. **Centroid tracking** — the blob centroid is the wand tip position, recorded as normalised (0–1) screen coordinates.
 5. **Gesture classification** — tip positions are accumulated over a rolling ~2.7 s / 80-sample window and evaluated every 1.5 s:
+   - **OPEN** — voice detection only
    - **PUSH** — average Y of the second half of the window is ≥ 0.15 below the first half (downward motion dominates)
    - **LUMOS** — average X of the second half is ≥ 0.15 to the right of the first half (rightward motion dominates)
    - **SUMMON** — the full window of points forms a near-circle: mean radius > 7% of frame, radius coefficient-of-variation < 55%, and the largest uncovered arc < 126°
@@ -296,6 +303,3 @@ No single device does everything. Remove either Snapdragon device and the system
 
 ---
 
-## Team
-
-Built at the ACM Hackathon 2026.
