@@ -50,6 +50,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var detectionStatusText: TextView
     private lateinit var wandOverlay: WandOverlayView
     private lateinit var voiceText: TextView
+    private lateinit var voiceLogText: TextView
 
     // ── Executors ─────────────────────────────────────────────────────────────
     private val mqttExecutor: ExecutorService    = Executors.newSingleThreadExecutor()
@@ -63,6 +64,7 @@ class MainActivity : AppCompatActivity() {
     // ── Voice recognition ─────────────────────────────────────────────────────
     private var speechRecognizer: SpeechRecognizer? = null
     private var isSpeechListening = false
+    private val voiceLog = ArrayDeque<String>(8)   // rolling debug log shown on screen
 
     // ── Permission launchers ──────────────────────────────────────────────────
     private val requestCameraPermission = registerForActivityResult(
@@ -74,7 +76,8 @@ class MainActivity : AppCompatActivity() {
     private val requestAudioPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) startVoiceRecognition() else voiceText.text = "Voice: mic permission denied"
+        if (granted) scheduleNewSession(delayMs = 0)
+        else { voiceText.text = "Voice: mic permission denied"; voiceLog("permission denied") }
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -99,6 +102,7 @@ class MainActivity : AppCompatActivity() {
         detectionStatusText = findViewById(R.id.detectionStatusText)
         wandOverlay         = findViewById(R.id.wandOverlay)
         voiceText           = findViewById(R.id.voiceText)
+        voiceLogText        = findViewById(R.id.voiceLogText)
 
         publishButton.setOnClickListener { publishSpell(SPELL_PAYLOAD) }
         cameraButton.setOnClickListener  { openCamera() }
@@ -122,80 +126,89 @@ class MainActivity : AppCompatActivity() {
     private fun requestAudioIfNeeded() {
         when {
             !SpeechRecognizer.isRecognitionAvailable(this) ->
-                voiceText.text = "Voice: speech recognition not available on this device"
+                voiceLog("NOT AVAILABLE on this device")
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-                    == PackageManager.PERMISSION_GRANTED -> startVoiceRecognition()
+                    == PackageManager.PERMISSION_GRANTED -> scheduleNewSession(delayMs = 0)
             else -> requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
-    private fun startVoiceRecognition() {
-        if (isSpeechListening) return
-
+    /**
+     * Destroys any existing recognizer, builds a fresh one, and starts listening.
+     * Always called via [scheduleNewSession] so there is never a double-start race.
+     */
+    private fun startFreshSession() {
+        isSpeechListening = false
         speechRecognizer?.destroy()
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also { sr ->
-            sr.setRecognitionListener(object : RecognitionListener {
+        speechRecognizer = null
 
-                override fun onReadyForSpeech(params: Bundle?) {
-                    isSpeechListening = true
-                    voiceText.text = "Voice: listening…"
+        val sr = SpeechRecognizer.createSpeechRecognizer(this)
+        speechRecognizer = sr
+
+        sr.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {
+                isSpeechListening = true
+                voiceLog("ready – speak now")
+                voiceText.text = "Voice: listening…"
+            }
+
+            override fun onBeginningOfSpeech() {
+                voiceLog("speech detected")
+                voiceText.text = "Voice: hearing…"
+            }
+
+            override fun onRmsChanged(rmsdB: Float) { /* no-op */ }
+            override fun onBufferReceived(buffer: ByteArray?) { /* no-op */ }
+
+            override fun onPartialResults(partialResults: Bundle?) {
+                val partial = partialResults
+                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull().orEmpty()
+                if (partial.isNotEmpty()) {
+                    voiceLog("partial: \"$partial\"")
+                    voiceText.text = "Voice: \"$partial\"…"
                 }
+            }
 
-                override fun onBeginningOfSpeech() {
-                    voiceText.text = "Voice: hearing…"
+            override fun onEndOfSpeech() {
+                voiceLog("end of speech")
+                voiceText.text = "Voice: processing…"
+            }
+
+            override fun onResults(results: Bundle?) {
+                isSpeechListening = false
+                val text = results
+                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    ?.firstOrNull().orEmpty()
+                voiceLog("RESULT: \"$text\"")
+                voiceText.text = "Voice: \"$text\""
+                handleVoiceSpell(text.uppercase())
+                scheduleNewSession(delayMs = 200)
+            }
+
+            override fun onError(error: Int) {
+                isSpeechListening = false
+                val label = when (error) {
+                    SpeechRecognizer.ERROR_NO_MATCH        -> "no_match(6)"
+                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT  -> "timeout(6)"
+                    SpeechRecognizer.ERROR_AUDIO           -> "audio_err(9)"
+                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "busy(8)"
+                    SpeechRecognizer.ERROR_NETWORK         -> "network(2)"
+                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "net_timeout(1)"
+                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "no_permission(9)"
+                    else -> "err($error)"
                 }
+                voiceLog("ERROR $label")
+                voiceText.text = "Voice: $label"
+                // Longer back-off for busy/audio errors; short for no-match/timeout
+                val delay = if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
+                                error == SpeechRecognizer.ERROR_AUDIO) 1500L else 300L
+                scheduleNewSession(delayMs = delay)
+            }
 
-                override fun onRmsChanged(rmsdB: Float) { /* no-op */ }
-                override fun onBufferReceived(buffer: ByteArray?) { /* no-op */ }
+            override fun onEvent(eventType: Int, params: Bundle?) { /* no-op */ }
+        })
 
-                override fun onPartialResults(partialResults: Bundle?) {
-                    val partial = partialResults
-                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        ?.firstOrNull() ?: return
-                    voiceText.text = "Voice: \"$partial\""
-                }
-
-                override fun onResults(results: Bundle?) {
-                    isSpeechListening = false
-                    val text = results
-                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        ?.firstOrNull() ?: ""
-
-                    voiceText.text = "Voice: \"$text\""
-                    handleVoiceSpell(text.uppercase())
-
-                    // Restart immediately for continuous listening
-                    startListeningIntent()
-                }
-
-                override fun onError(error: Int) {
-                    isSpeechListening = false
-                    val label = when (error) {
-                        SpeechRecognizer.ERROR_NO_MATCH        -> "no match"
-                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT  -> "timeout"
-                        SpeechRecognizer.ERROR_AUDIO           -> "audio error"
-                        SpeechRecognizer.ERROR_NETWORK         -> "network error"
-                        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "network timeout"
-                        else -> "error $error"
-                    }
-                    voiceText.text = "Voice: $label – restarting…"
-                    // Brief delay to avoid hammering on repeated errors
-                    voiceText.postDelayed({ startListeningIntent() }, 1000)
-                }
-
-                override fun onEndOfSpeech() {
-                    voiceText.text = "Voice: processing…"
-                }
-
-                override fun onEvent(eventType: Int, params: Bundle?) { /* no-op */ }
-            })
-        }
-
-        startListeningIntent()
-    }
-
-    private fun startListeningIntent() {
-        if (isSpeechListening) return
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
@@ -203,10 +216,21 @@ class MainActivity : AppCompatActivity() {
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
         }
-        speechRecognizer?.startListening(intent)
+        Log.d(TAG, "SR: startListening")
+        sr.startListening(intent)
     }
 
+    /** Posts [startFreshSession] on the main thread after [delayMs] ms. */
+    private fun scheduleNewSession(delayMs: Long) {
+        voiceText.removeCallbacks(restartRunnable)
+        if (delayMs == 0L) restartRunnable.run()
+        else voiceText.postDelayed(restartRunnable, delayMs)
+    }
+
+    private val restartRunnable = Runnable { startFreshSession() }
+
     private fun stopVoiceRecognition() {
+        voiceText.removeCallbacks(restartRunnable)
         isSpeechListening = false
         speechRecognizer?.stopListening()
         speechRecognizer?.destroy()
@@ -216,14 +240,25 @@ class MainActivity : AppCompatActivity() {
     private fun handleVoiceSpell(text: String) {
         when {
             "STUPEFY" in text -> {
-                voiceText.text = "Voice: \"$text\" → STUPEFY!"
+                voiceLog(">>> STUPEFY cast!")
+                voiceText.text = "Voice: STUPEFY!"
                 publishSpell("1")
             }
             "LUMOS" in text -> {
-                voiceText.text = "Voice: \"$text\" → LUMOS!"
+                voiceLog(">>> LUMOS cast!")
+                voiceText.text = "Voice: LUMOS!"
                 publishSpell("2")
             }
         }
+    }
+
+    /** Appends a timestamped line to the on-screen debug log (max 6 lines). */
+    private fun voiceLog(msg: String) {
+        val ts = System.currentTimeMillis() % 100000   // last 5 digits of epoch ms
+        Log.d(TAG, "SR: $msg")
+        voiceLog.addLast("${ts}ms $msg")
+        while (voiceLog.size > 6) voiceLog.removeFirst()
+        voiceLogText.text = voiceLog.joinToString("\n")
     }
 
     // ── Camera ────────────────────────────────────────────────────────────────
