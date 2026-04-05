@@ -697,6 +697,14 @@
     src="{{ url_for('static', filename='voldemort_suite.mp3') }}"
   ></audio>
 
+  <audio
+    id="open-sound-effect"
+    preload="auto"
+    playsinline
+    src="{{ url_for('static', filename='open_sound_effect.mp3') }}"
+    ></audio>
+
+
   <script>
     // ── State machine: 'portal' → 'dashboard' → 'takeover' → 'portal' ─────────
     // STATE: 'portal' | 'dashboard' | 'takeover'
@@ -722,6 +730,7 @@
     const cursor         = document.getElementById('blood-cursor');
     const voiceLine      = document.getElementById('voice-line');
     const themeTrack     = document.getElementById('theme-track');
+    const openSound      = document.getElementById('open-sound-effect');
     const voldemortImg   = document.getElementById('voldemort-img');
 
     let totalCount  = 0;
@@ -863,13 +872,24 @@
 
     // ── portal → dashboard ────────────────────────────────────────────────────
     function openPortal() {
+      playOpenAudio();           // ← add this
       portalScreen.classList.add('collapsing');
+      
       setTimeout(() => {
         portalScreen.classList.add('hidden');
         portalScreen.classList.remove('collapsing');
         STATE = 'dashboard';
         connectDashboard();
       }, 800);
+    }
+
+    async function playOpenAudio() {
+      openSound.currentTime = 0;
+      themeTrack.volume = 0.45;
+      try {
+        await openSound.play();
+        await waitForAudioToFinish(openSound);
+      } catch (_) {}
     }
 
     // ── dashboard → takeover ──────────────────────────────────────────────────
