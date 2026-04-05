@@ -1,6 +1,7 @@
 package com.example.wandapplication
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -9,6 +10,9 @@ import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.YuvImage
 import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.util.Log
 import android.view.View
 import android.widget.TextView
@@ -45,6 +49,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var detectionIndicator: View
     private lateinit var detectionStatusText: TextView
     private lateinit var wandOverlay: WandOverlayView
+    private lateinit var voiceText: TextView
 
     // ── Executors ─────────────────────────────────────────────────────────────
     private val mqttExecutor: ExecutorService    = Executors.newSingleThreadExecutor()
@@ -55,11 +60,21 @@ class MainActivity : AppCompatActivity() {
     private var stickDetector: StickDetector? = null
     private var isDetectionEnabled = false
 
-    // ── Permission launcher ───────────────────────────────────────────────────
-    private val requestPermissionLauncher = registerForActivityResult(
+    // ── Voice recognition ─────────────────────────────────────────────────────
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var isSpeechListening = false
+
+    // ── Permission launchers ──────────────────────────────────────────────────
+    private val requestCameraPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) startCamera() else statusText.text = "Camera permission denied"
+    }
+
+    private val requestAudioPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) startVoiceRecognition() else voiceText.text = "Voice: mic permission denied"
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -75,26 +90,140 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
-        publishButton      = findViewById(R.id.publishButton)
-        cameraButton       = findViewById(R.id.cameraButton)
-        previewView        = findViewById(R.id.previewView)
-        cameraFrame        = findViewById(R.id.cameraFrame)
-        statusText         = findViewById(R.id.statusText)
-        detectionIndicator = findViewById(R.id.detectionIndicator)
+        publishButton       = findViewById(R.id.publishButton)
+        cameraButton        = findViewById(R.id.cameraButton)
+        previewView         = findViewById(R.id.previewView)
+        cameraFrame         = findViewById(R.id.cameraFrame)
+        statusText          = findViewById(R.id.statusText)
+        detectionIndicator  = findViewById(R.id.detectionIndicator)
         detectionStatusText = findViewById(R.id.detectionStatusText)
-        wandOverlay        = findViewById(R.id.wandOverlay)
+        wandOverlay         = findViewById(R.id.wandOverlay)
+        voiceText           = findViewById(R.id.voiceText)
 
         publishButton.setOnClickListener { publishSpell(SPELL_PAYLOAD) }
         cameraButton.setOnClickListener  { openCamera() }
 
         stickDetector = StickDetector(this)
+
+        // Start voice recognition immediately
+        requestAudioIfNeeded()
     }
 
     override fun onDestroy() {
         mqttExecutor.shutdownNow()
         analysisExecutor.shutdownNow()
         stickDetector?.close()
+        stopVoiceRecognition()
         super.onDestroy()
+    }
+
+    // ── Voice recognition ─────────────────────────────────────────────────────
+
+    private fun requestAudioIfNeeded() {
+        when {
+            !SpeechRecognizer.isRecognitionAvailable(this) ->
+                voiceText.text = "Voice: speech recognition not available on this device"
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                    == PackageManager.PERMISSION_GRANTED -> startVoiceRecognition()
+            else -> requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    private fun startVoiceRecognition() {
+        if (isSpeechListening) return
+
+        speechRecognizer?.destroy()
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also { sr ->
+            sr.setRecognitionListener(object : RecognitionListener {
+
+                override fun onReadyForSpeech(params: Bundle?) {
+                    isSpeechListening = true
+                    voiceText.text = "Voice: listening…"
+                }
+
+                override fun onBeginningOfSpeech() {
+                    voiceText.text = "Voice: hearing…"
+                }
+
+                override fun onRmsChanged(rmsdB: Float) { /* no-op */ }
+                override fun onBufferReceived(buffer: ByteArray?) { /* no-op */ }
+
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val partial = partialResults
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull() ?: return
+                    voiceText.text = "Voice: \"$partial\""
+                }
+
+                override fun onResults(results: Bundle?) {
+                    isSpeechListening = false
+                    val text = results
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull() ?: ""
+
+                    voiceText.text = "Voice: \"$text\""
+                    handleVoiceSpell(text.uppercase())
+
+                    // Restart immediately for continuous listening
+                    startListeningIntent()
+                }
+
+                override fun onError(error: Int) {
+                    isSpeechListening = false
+                    val label = when (error) {
+                        SpeechRecognizer.ERROR_NO_MATCH        -> "no match"
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT  -> "timeout"
+                        SpeechRecognizer.ERROR_AUDIO           -> "audio error"
+                        SpeechRecognizer.ERROR_NETWORK         -> "network error"
+                        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "network timeout"
+                        else -> "error $error"
+                    }
+                    voiceText.text = "Voice: $label – restarting…"
+                    // Brief delay to avoid hammering on repeated errors
+                    voiceText.postDelayed({ startListeningIntent() }, 1000)
+                }
+
+                override fun onEndOfSpeech() {
+                    voiceText.text = "Voice: processing…"
+                }
+
+                override fun onEvent(eventType: Int, params: Bundle?) { /* no-op */ }
+            })
+        }
+
+        startListeningIntent()
+    }
+
+    private fun startListeningIntent() {
+        if (isSpeechListening) return
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+        }
+        speechRecognizer?.startListening(intent)
+    }
+
+    private fun stopVoiceRecognition() {
+        isSpeechListening = false
+        speechRecognizer?.stopListening()
+        speechRecognizer?.destroy()
+        speechRecognizer = null
+    }
+
+    private fun handleVoiceSpell(text: String) {
+        when {
+            "STUPEFY" in text -> {
+                voiceText.text = "Voice: \"$text\" → STUPEFY!"
+                publishSpell("1")
+            }
+            "LUMOS" in text -> {
+                voiceText.text = "Voice: \"$text\" → LUMOS!"
+                publishSpell("2")
+            }
+        }
     }
 
     // ── Camera ────────────────────────────────────────────────────────────────
@@ -109,7 +238,7 @@ class MainActivity : AppCompatActivity() {
         ) {
             startCamera()
         } else {
-            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+            requestCameraPermission.launch(Manifest.permission.CAMERA)
         }
     }
 
@@ -183,10 +312,10 @@ class MainActivity : AppCompatActivity() {
                 updateIndicator(true)
                 statusText.text = result.message
 
-                // Auto-publish when a spell is recognised
+                // Auto-publish when a wand gesture spell is recognised
                 when (result.spell) {
-                    "WINGARDIUM" -> publishSpell("1")
-                    "LUMOS"      -> publishSpell("2")
+                    "STUPEFY" -> publishSpell("1")
+                    "LUMOS"   -> publishSpell("2")
                 }
             } else {
                 wandOverlay.clearWand()
@@ -198,8 +327,6 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Correctly converts a YUV_420_888 [ImageProxy] (what CameraX delivers) to a [Bitmap].
-     * The old implementation only read plane[0] raw bytes and tried to decode them as JPEG,
-     * which always produced null.
      */
     private fun imageProxyToBitmap(imageProxy: ImageProxy): Bitmap? {
         return try {
@@ -264,8 +391,8 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Publishes [payload] to the Arduino via MQTT.
-     * Called automatically when a spell gesture is detected, and also
-     * manually via the Publish button (sends the default payload "1").
+     * Called automatically when a spell gesture or voice spell is detected,
+     * and also manually via the Publish button (sends the default payload "1").
      */
     fun publishSpell(payload: String = SPELL_PAYLOAD) {
         publishButton.isEnabled = false
