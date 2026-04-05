@@ -31,6 +31,10 @@
       padding: 2rem 1rem;
     }
 
+    body.takeover-active {
+      overflow: hidden;
+    }
+
     h1 {
       font-size: 2rem;
       color: var(--gold);
@@ -166,28 +170,315 @@
       color: var(--muted);
       margin-top: 1rem;
     }
+
+    #dashboard-shell {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: filter 0.45s ease, transform 0.45s ease, opacity 0.45s ease;
+    }
+
+    #takeover {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      z-index: 999;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #takeover.flash  { animation: flash-red 0.7s ease forwards; }
+    #takeover.noise  { opacity: 1; pointer-events: all; animation: static-noise 0.07s steps(1) infinite; }
+    #takeover.settle {
+      opacity: 1;
+      pointer-events: all;
+      animation: none;
+      background: radial-gradient(ellipse at center, #1a0000 0%, #050000 60%, #000 100%);
+    }
+
+    @keyframes flash-red {
+      0%   { opacity: 0; background: #000; }
+      25%  { opacity: 1; background: #6b0000; }
+      55%  { opacity: 1; background: #cc0000; }
+      100% { opacity: 1; background: #000; }
+    }
+
+    @keyframes static-noise {
+      0%  { filter: brightness(1.6) contrast(2.5) hue-rotate(0deg); }
+      25% { filter: brightness(0.4) contrast(0.7) hue-rotate(200deg); }
+      50% { filter: brightness(2.0) contrast(3.5) hue-rotate(90deg); }
+      75% { filter: brightness(0.2) contrast(1.5) hue-rotate(310deg); }
+    }
+
+    #takeover::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, 0.22) 2px,
+        rgba(0, 0, 0, 0.22) 4px
+      );
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    #dark-lord-face {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 18rem;
+      position: relative;
+      z-index: 2;
+      padding: 1rem;
+    }
+
+    #voldemort-img {
+      width: min(70vw, 260px);
+      max-height: 45vh;
+      height: auto;
+      object-fit: contain;
+      opacity: 0;
+      transform: scale(0.2) rotate(-15deg);
+      transition: opacity 0.7s cubic-bezier(.2,1,.4,1), transform 0.7s cubic-bezier(.2,1,.4,1);
+      filter: drop-shadow(0 0 0 #8b0000);
+      animation: breathe 2.8s ease-in-out infinite;
+      position: relative;
+      z-index: 2;
+    }
+
+    #voldemort-img.visible {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+      filter: drop-shadow(0 0 40px #cc0000);
+    }
+
+    @keyframes breathe {
+      0%, 100% { filter: drop-shadow(0 0 25px #8b0000); }
+      50% { filter: drop-shadow(0 0 70px #ff2200) drop-shadow(0 0 25px #ff6600); }
+    }
+
+    #takeover-content {
+      text-align: center;
+      padding: 0 2rem;
+      max-width: 680px;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+      position: relative;
+      z-index: 2;
+    }
+
+    #takeover-content.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    #takeover-title {
+      position: relative;
+      display: inline-block;
+      font-size: 3rem;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #ff2200;
+      text-shadow: 0 0 40px #ff0000, 0 0 90px #8b0000;
+      animation: flicker 2.5s step-end infinite;
+    }
+
+    @keyframes flicker {
+      0%, 94%, 100% { opacity: 1; }
+      95% { opacity: 0.05; }
+      97% { opacity: 1; }
+      98% { opacity: 0.3; }
+    }
+
+    #takeover-title::before,
+    #takeover-title::after {
+      content: attr(data-text);
+      position: absolute;
+      inset: 0;
+    }
+
+    #takeover-title::before {
+      color: #ff0000;
+      left: 3px;
+      clip-path: inset(33% 0 45% 0);
+      animation: g1 1.8s infinite linear;
+    }
+
+    #takeover-title::after {
+      color: #00eeff;
+      left: -3px;
+      clip-path: inset(65% 0 20% 0);
+      animation: g2 2.2s infinite linear;
+    }
+
+    @keyframes g1 {
+      0%, 100% { clip-path: inset(33% 0 45% 0); }
+      25% { clip-path: inset(10% 0 70% 0); }
+      50% { clip-path: inset(55% 0 5% 0); }
+    }
+
+    @keyframes g2 {
+      0%, 100% { clip-path: inset(65% 0 20% 0); }
+      33% { clip-path: inset(80% 0 3% 0); }
+      66% { clip-path: inset(20% 0 60% 0); }
+    }
+
+    #takeover-quote {
+      margin-top: 0.6rem;
+      font-size: 1.1rem;
+      color: #cc3300;
+      font-style: italic;
+      letter-spacing: 0.04em;
+    }
+
+    #takeover-decrees {
+      margin-top: 1.2rem;
+      background: rgba(100, 0, 0, 0.18);
+      border: 1px solid #6b0000;
+      border-radius: 6px;
+      padding: 0.9rem 1.4rem;
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+
+    .decree {
+      font-size: 0.88rem;
+      color: #ff9980;
+      opacity: 0;
+      transform: translateX(-12px);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+      line-height: 1.5;
+    }
+
+    .decree.visible {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    .decree:last-child {
+      color: #ff5533;
+      font-weight: 600;
+    }
+
+    #blood-cursor {
+      position: fixed;
+      width: 18px;
+      height: 18px;
+      background: radial-gradient(circle, #ff2200, #7a0000);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9999;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 10px #ff0000;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+
+    .gslice {
+      position: fixed;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: rgba(255, 0, 0, 0.85);
+      pointer-events: none;
+      z-index: 9998;
+      animation: _sl 0.18s linear forwards;
+    }
+
+    @keyframes _sl {
+      from { opacity: 1; }
+      to { top: 100%; opacity: 0; }
+    }
+
+    #vignette {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 100;
+      opacity: 0;
+      background: radial-gradient(ellipse at center, transparent 35%, rgba(139, 0, 0, 0.75) 100%);
+    }
+
+    #vignette.pulse {
+      animation: vpulse 0.35s ease-in-out 5;
+    }
+
+    @keyframes vpulse {
+      0%, 100% { opacity: 0; }
+      50% { opacity: 1; }
+    }
   </style>
 </head>
 <body>
+  <div id="dashboard-shell">
+    <h1>✦ Wand Dashboard</h1>
+    <p class="subtitle">MQTT broker: {{ broker }}:{{ port }} &nbsp;|&nbsp; topic: <code>{{ topic }}</code></p>
 
-  <h1>✦ Wand Dashboard</h1>
-  <p class="subtitle">MQTT broker: {{ broker }}:{{ port }} &nbsp;|&nbsp; topic: <code>{{ topic }}</code></p>
+    <div class="status-bar">
+      <span class="dot" id="dot"></span>
+      <span id="status-text">Connecting…</span>
+    </div>
 
-  <div class="status-bar">
-    <span class="dot" id="dot"></span>
-    <span id="status-text">Connecting…</span>
+    <div class="spell-banner" id="banner">
+      <div class="spell-name" id="spell-name">—</div>
+      <div class="spell-sub" id="spell-sub">Waiting for a spell…</div>
+    </div>
+
+    <h2>Event Log</h2>
+    <div id="log"><div class="empty-state">No spells received yet.</div></div>
+    <div class="counter" id="counter"></div>
   </div>
 
-  <div class="spell-banner" id="banner">
-    <div class="spell-name" id="spell-name">—</div>
-    <div class="spell-sub" id="spell-sub">Waiting for a spell…</div>
+  <div id="blood-cursor"></div>
+  <div id="vignette"></div>
+  <div id="takeover">
+    <div id="dark-lord-face">
+      <img id="voldemort-img" src="{{ url_for('legacy_static', filename='voldemort.png') }}" alt="Voldemort" />
+    </div>
+    <div id="takeover-content">
+      <div id="takeover-title" data-text="THE DARK LORD RISES">THE DARK LORD RISES</div>
+      <div id="takeover-quote">"You fool… you dared summon ME?"</div>
+      <div id="takeover-decrees">
+        <div class="decree">§ I. All spells are hereby FORBIDDEN — except mine.</div>
+        <div class="decree">§ II. Your wand is confiscated. Effective immediately.</div>
+        <div class="decree">§ III. The Ministry of Magic is DISSOLVED.</div>
+        <div class="decree">§ IV. Bow before the Dark Lord or face the consequences.</div>
+        <div class="decree">§ V. This website now belongs to ME. 💀</div>
+      </div>
+    </div>
   </div>
 
-  <h2>Event Log</h2>
-  <div id="log"><div class="empty-state">No spells received yet.</div></div>
-  <div class="counter" id="counter"></div>
+  <audio
+    id="voice-line"
+    preload="auto"
+    playsinline
+    src="{{ url_for('static', filename='voldemort_voice_line.mp3') }}"
+  ></audio>
+
+  <audio
+    id="theme-track"
+    preload="auto"
+    playsinline
+    src="{{ url_for('static', filename='voldemort_suite.mp3') }}"
+  ></audio>
 
   <script>
+    const AUTO_TAKEOVER = {{ 'true' if takeover_on_load else 'false' }};
+    const dashboard  = document.getElementById('dashboard-shell');
     const dot        = document.getElementById('dot');
     const statusText = document.getElementById('status-text');
     const banner     = document.getElementById('banner');
@@ -195,12 +486,26 @@
     const spellSub   = document.getElementById('spell-sub');
     const log        = document.getElementById('log');
     const counter    = document.getElementById('counter');
+    const takeover   = document.getElementById('takeover');
+    const content    = document.getElementById('takeover-content');
+    const decrees    = document.querySelectorAll('.decree');
+    const vignette   = document.getElementById('vignette');
+    const cursor     = document.getElementById('blood-cursor');
+    const voiceLine  = document.getElementById('voice-line');
+    const themeTrack = document.getElementById('theme-track');
+    const voldemortImg = document.getElementById('voldemort-img');
 
     let totalCount = 0;
     let flashTimer = null;
+    let takeoverActive = false;
 
     const SPELL_LABELS = { '1': 'PUSH', '2': 'LUMOS' };
     const SPELL_CSS    = { 'PUSH': 'push', 'LUMOS': 'lumos' };
+
+    document.addEventListener('mousemove', event => {
+      cursor.style.left = event.clientX + 'px';
+      cursor.style.top = event.clientY + 'px';
+    });
 
     function setStatus(connected, text) {
       dot.className  = 'dot ' + (connected ? 'connected' : 'error');
@@ -244,6 +549,115 @@
       counter.textContent = `Total spells received: ${totalCount}`;
     }
 
+    function spawnSlice() {
+      const slice = document.createElement('div');
+      slice.className = 'gslice';
+      slice.style.top = Math.random() * 100 + '%';
+      document.body.appendChild(slice);
+      setTimeout(() => slice.remove(), 220);
+    }
+
+    function waitForAudioToFinish(audioEl) {
+      return new Promise(resolve => {
+        if (audioEl.ended) {
+          resolve();
+          return;
+        }
+
+        const cleanup = () => {
+          audioEl.removeEventListener('ended', handleDone);
+          audioEl.removeEventListener('error', handleDone);
+        };
+
+        const handleDone = () => {
+          cleanup();
+          resolve();
+        };
+
+        audioEl.addEventListener('ended', handleDone, { once: true });
+        audioEl.addEventListener('error', handleDone, { once: true });
+      });
+    }
+
+    async function playTakeoverAudio() {
+      voiceLine.currentTime = 0;
+      voiceLine.muted = false;
+      themeTrack.currentTime = 0;
+      themeTrack.muted = false;
+      themeTrack.volume = 0.45;
+
+      try {
+        await voiceLine.play();
+        await waitForAudioToFinish(voiceLine);
+        await themeTrack.play();
+      } catch (error) {
+        // Browsers may still block autoplay without a trusted user gesture.
+      }
+    }
+
+    function runTakeover() {
+      if (takeoverActive) return;
+      takeoverActive = true;
+
+      if (window.location.search.includes('takeover=1')) {
+        window.history.replaceState({}, document.title, '/');
+      }
+
+      document.body.classList.add('takeover-active');
+      playTakeoverAudio();
+
+      spellName.className = 'spell-name active';
+      spellName.textContent = 'SUMMON';
+      spellSub.textContent = '⚠ Something stirs in the darkness…';
+      spellSub.style.color = '#f59e0b';
+      setStatus(false, '⚠ CONNECTION HIJACKED');
+      dot.style.background = '#ff0000';
+      dot.style.boxShadow = '0 0 10px #ff0000';
+
+      setTimeout(() => vignette.classList.add('pulse'), 300);
+
+      let n = 0;
+      const sliceTimer = setInterval(() => {
+        spawnSlice();
+        if (++n >= 14) clearInterval(sliceTimer);
+      }, 75);
+
+      setTimeout(() => {
+        spellName.textContent = 'BACKFIRE';
+        spellSub.textContent = '⚡ THE RITUAL BACKFIRES!';
+        spellSub.style.color = '#ef4444';
+      }, 600);
+
+      setTimeout(() => {
+        takeover.className = 'flash';
+        dashboard.style.transform = 'scale(1.01)';
+      }, 1100);
+
+      setTimeout(() => {
+        takeover.className = 'noise';
+        dashboard.style.filter = 'blur(10px) brightness(0.15)';
+      }, 1800);
+
+      setTimeout(() => {
+        takeover.className = 'settle';
+        cursor.style.opacity = '1';
+        voldemortImg.classList.add('visible');
+        document.title = 'THE DARK LORD REIGNS';
+      }, 2600);
+
+      setTimeout(() => content.classList.add('visible'), 3400);
+
+      decrees.forEach((decree, index) => {
+        setTimeout(() => decree.classList.add('visible'), 4100 + index * 450);
+      });
+
+      setTimeout(() => {
+        takeover.style.animation = 'none';
+        takeover.style.background =
+          'radial-gradient(ellipse at 50% 40%, #1c0000 0%, #050000 55%, #000 100%)';
+      }, 7000);
+    }
+
     // ── SSE ──────────────────────────────────────────────────────────────────
     function connect() {
       setStatus(false, 'Connecting to server…');
@@ -257,7 +671,11 @@
         if (parts.length < 3) return;
         const [time, spell, raw] = parts;
 
-        if (raw === '3') { hijackPage(); return; }
+        if (raw === '3') {
+          es.close();
+          runTakeover();
+          return;
+        }
 
         flashBanner(spell);
         addLog(time, spell, raw);
@@ -272,54 +690,8 @@
 
     connect();
 
-    // ── Takeover redirect ─────────────────────────────────────────────────────
-    function hijackPage() {
-      // Prevent any further SSE handling
-      document.querySelectorAll('*').forEach(el => el.style.pointerEvents = 'none');
-
-      // Inject glitch stylesheet on-the-fly
-      const style = document.createElement('style');
-      style.textContent = `
-        @keyframes _redflash { 0%,100%{background:#0d0d1a} 20%{background:#3a0000} 50%{background:#8b0000} 70%{background:#1a0000} }
-        @keyframes _shake    { 0%,100%{transform:translate(0)} 20%{transform:translate(-6px,3px)} 40%{transform:translate(6px,-3px)} 60%{transform:translate(-4px,2px)} 80%{transform:translate(4px,-1px)} }
-        @keyframes _slice    { from{top:0;opacity:1} to{top:100%;opacity:0} }
-        ._glitch-slice { position:fixed;left:0;right:0;height:5px;background:rgba(255,0,0,0.9);pointer-events:none;z-index:9999;animation:_slice 0.18s linear forwards; }
-        ._corrupt { filter:blur(1px) brightness(1.6) hue-rotate(180deg); transition:filter 0.1s; }
-      `;
-      document.head.appendChild(style);
-
-      const body = document.body;
-
-      // Phase 1 – rapid glitch slices (0–800 ms)
-      let sliceCount = 0;
-      const sliceTimer = setInterval(() => {
-        const s = document.createElement('div');
-        s.className = '_glitch-slice';
-        s.style.top = Math.random() * 100 + '%';
-        document.body.appendChild(s);
-        setTimeout(() => s.remove(), 200);
-        if (++sliceCount >= 10) clearInterval(sliceTimer);
-      }, 80);
-
-      // Phase 2 – body shakes & flashes red (400 ms)
-      setTimeout(() => {
-        body.style.animation = '_shake 0.4s ease, _redflash 0.8s ease';
-      }, 400);
-
-      // Phase 3 – corrupt the content visually (900 ms)
-      setTimeout(() => {
-        document.getElementById('banner').classList.add('_corrupt');
-        document.getElementById('log').classList.add('_corrupt');
-        setStatus(false, '⚠ CONNECTION HIJACKED');
-        dot.style.background = '#ff0000';
-        dot.style.boxShadow  = '0 0 10px #ff0000';
-      }, 900);
-
-      // Phase 4 – hard redirect (1 400 ms)
-      setTimeout(() => {
-        body.style.filter = 'invert(1) brightness(3)';
-        setTimeout(() => { window.location.href = '/front'; }, 150);
-      }, 1400);
+    if (AUTO_TAKEOVER) {
+      runTakeover();
     }
   </script>
 </body>

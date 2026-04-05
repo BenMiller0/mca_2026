@@ -1,7 +1,9 @@
+import os
 import queue
 import threading
 import time
-from flask import Flask, Response, render_template, stream_with_context
+from pathlib import Path
+from flask import Flask, Response, redirect, render_template, request, send_from_directory, stream_with_context, url_for
 import paho.mqtt.client as mqtt
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -10,7 +12,10 @@ MQTT_PORT     = 1883
 MQTT_TOPIC    = "spell/cast"
 SPELL_MAP     = {"1": "PUSH", "2": "LUMOS", "3": "SUMMON"}
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="assets", static_url_path="/assets")
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+LEGACY_STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 # Each SSE client gets its own queue; broadcast pushes to all of them.
 _client_queues: list[queue.Queue] = []
@@ -76,7 +81,12 @@ threading.Thread(target=start_mqtt, daemon=True).start()
 
 @app.route("/front")
 def front():
-    return render_template("front.html")
+    return redirect(url_for("index", takeover=1))
+
+
+@app.route("/static/<path:filename>")
+def legacy_static(filename):
+    return send_from_directory(LEGACY_STATIC_DIR, filename)
 
 
 @app.route("/")
@@ -84,7 +94,8 @@ def index():
     return render_template("index.html",
                            broker=MQTT_BROKER,
                            port=MQTT_PORT,
-                           topic=MQTT_TOPIC)
+                           topic=MQTT_TOPIC,
+                           takeover_on_load=request.args.get("takeover") == "1")
 
 
 @app.route("/stream")
@@ -118,5 +129,14 @@ def stream():
     )
 
 
+@app.after_request
+def disable_html_caching(response):
+    if response.mimetype in {"text/html", "text/event-stream"}:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "5000")), debug=False)
