@@ -76,7 +76,7 @@ class MainActivity : AppCompatActivity() {
     private val requestAudioPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) scheduleNewSession(delayMs = 0)
+        if (granted) initRecognizerAndListen()
         else { voiceText.text = "Voice: mic permission denied"; voiceLog("permission denied") }
     }
 
@@ -128,91 +128,112 @@ class MainActivity : AppCompatActivity() {
             !SpeechRecognizer.isRecognitionAvailable(this) ->
                 voiceLog("NOT AVAILABLE on this device")
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-                    == PackageManager.PERMISSION_GRANTED -> scheduleNewSession(delayMs = 0)
+                    == PackageManager.PERMISSION_GRANTED -> initRecognizerAndListen()
             else -> requestAudioPermission.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
     /**
-     * Destroys any existing recognizer, builds a fresh one, and starts listening.
-     * Always called via [scheduleNewSession] so there is never a double-start race.
+     * Creates the [SpeechRecognizer] exactly once and wires up the listener.
+     * After that, all cycling is done by [scheduleRestart] → [restartListening],
+     * which just calls [SpeechRecognizer.startListening] on the *same* instance.
+     * Destroying + recreating every cycle was the root cause of ERROR_RECOGNIZER_BUSY.
      */
-    private fun startFreshSession() {
-        isSpeechListening = false
-        speechRecognizer?.destroy()
-        speechRecognizer = null
+    private fun initRecognizerAndListen() {
+        if (speechRecognizer != null) { restartListening(); return }
 
-        val sr = SpeechRecognizer.createSpeechRecognizer(this)
-        speechRecognizer = sr
-
-        sr.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) {
-                isSpeechListening = true
-                voiceLog("ready – speak now")
-                voiceText.text = "Voice: listening…"
-            }
-
-            override fun onBeginningOfSpeech() {
-                voiceLog("speech detected")
-                voiceText.text = "Voice: hearing…"
-            }
-
-            override fun onRmsChanged(rmsdB: Float) { /* no-op */ }
-            override fun onBufferReceived(buffer: ByteArray?) { /* no-op */ }
-
-            override fun onPartialResults(partialResults: Bundle?) {
-                val partial = partialResults
-                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull().orEmpty()
-                if (partial.isNotEmpty()) {
-                    voiceLog("partial: \"$partial\"")
-                    voiceText.text = "Voice: \"$partial\"…"
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this).also { sr ->
+            sr.setRecognitionListener(object : RecognitionListener {
+                override fun onReadyForSpeech(params: Bundle?) {
+                    isSpeechListening = true
+                    voiceLog("ready – speak now")
+                    voiceText.text = "Voice: listening…"
                 }
-            }
 
-            override fun onEndOfSpeech() {
-                voiceLog("end of speech")
-                voiceText.text = "Voice: processing…"
-            }
-
-            override fun onResults(results: Bundle?) {
-                isSpeechListening = false
-                val text = results
-                    ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    ?.firstOrNull().orEmpty()
-                voiceLog("RESULT: \"$text\"")
-                voiceText.text = "Voice: \"$text\""
-                handleVoiceSpell(text.uppercase())
-                scheduleNewSession(delayMs = 200)
-            }
-
-            override fun onError(error: Int) {
-                isSpeechListening = false
-                val label = when (error) {
-                    SpeechRecognizer.ERROR_NO_MATCH        -> "no_match(6)"
-                    SpeechRecognizer.ERROR_SPEECH_TIMEOUT  -> "timeout(6)"
-                    SpeechRecognizer.ERROR_AUDIO           -> "audio_err(9)"
-                    SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "busy(8)"
-                    SpeechRecognizer.ERROR_NETWORK         -> "network(2)"
-                    SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "net_timeout(1)"
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "no_permission(9)"
-                    else -> "err($error)"
+                override fun onBeginningOfSpeech() {
+                    voiceLog("speech detected")
+                    voiceText.text = "Voice: hearing…"
                 }
-                voiceLog("ERROR $label")
-                voiceText.text = "Voice: $label"
-                // Longer back-off for busy/audio errors; short for no-match/timeout
-                val delay = if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY ||
-                                error == SpeechRecognizer.ERROR_AUDIO) 1500L else 300L
-                scheduleNewSession(delayMs = delay)
-            }
 
-            override fun onEvent(eventType: Int, params: Bundle?) { /* no-op */ }
-        })
+                override fun onRmsChanged(rmsdB: Float) { /* no-op */ }
+                override fun onBufferReceived(buffer: ByteArray?) { /* no-op */ }
 
+                override fun onPartialResults(partialResults: Bundle?) {
+                    val partial = partialResults
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull().orEmpty()
+                    if (partial.isNotEmpty()) {
+                        voiceLog("partial: \"$partial\"")
+                        voiceText.text = "Voice: \"$partial\"…"
+                    }
+                }
+
+                override fun onEndOfSpeech() {
+                    voiceLog("end of speech")
+                    voiceText.text = "Voice: processing…"
+                }
+
+                override fun onResults(results: Bundle?) {
+                    isSpeechListening = false
+                    val text = results
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull().orEmpty()
+                    voiceLog("RESULT: \"$text\"")
+                    voiceText.text = "Voice: \"$text\""
+                    handleVoiceSpell(text.uppercase())
+                    // Reuse the same instance – just restart listening
+                    scheduleRestart(delayMs = 300)
+                }
+
+                override fun onError(error: Int) {
+                    isSpeechListening = false
+                    val label = when (error) {
+                        SpeechRecognizer.ERROR_NO_MATCH        -> "no_match"
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT  -> "timeout"
+                        SpeechRecognizer.ERROR_AUDIO           -> "audio_err"
+                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "busy"
+                        SpeechRecognizer.ERROR_NETWORK         -> "network"
+                        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "net_timeout"
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "no_permission"
+                        else -> "err($error)"
+                    }
+                    voiceLog("ERROR $label")
+                    voiceText.text = "Voice: $label"
+
+                    when (error) {
+                        // Recoverable without recreating — just restart
+                        SpeechRecognizer.ERROR_NO_MATCH,
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> scheduleRestart(delayMs = 200)
+
+                        // Service was busy — give it more breathing room, but reuse instance
+                        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> scheduleRestart(delayMs = 2000)
+
+                        // Fatal audio/permission error — destroy and recreate
+                        else -> {
+                            speechRecognizer?.destroy()
+                            speechRecognizer = null
+                            isSpeechListening = false
+                            scheduleRestart(delayMs = 1500)
+                        }
+                    }
+                }
+
+                override fun onEvent(eventType: Int, params: Bundle?) { /* no-op */ }
+            })
+        }
+
+        restartListening()
+    }
+
+    private fun restartListening() {
+        if (isSpeechListening) return
+        val sr = speechRecognizer ?: run { initRecognizerAndListen(); return }
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            // Suppress system beep by not using the activity-based recognizer intent
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
         }
@@ -220,14 +241,12 @@ class MainActivity : AppCompatActivity() {
         sr.startListening(intent)
     }
 
-    /** Posts [startFreshSession] on the main thread after [delayMs] ms. */
-    private fun scheduleNewSession(delayMs: Long) {
+    private fun scheduleRestart(delayMs: Long) {
         voiceText.removeCallbacks(restartRunnable)
-        if (delayMs == 0L) restartRunnable.run()
-        else voiceText.postDelayed(restartRunnable, delayMs)
+        voiceText.postDelayed(restartRunnable, delayMs)
     }
 
-    private val restartRunnable = Runnable { startFreshSession() }
+    private val restartRunnable = Runnable { restartListening() }
 
     private fun stopVoiceRecognition() {
         voiceText.removeCallbacks(restartRunnable)
