@@ -423,7 +423,7 @@
     }
   </style>
 </head>
-<body>
+<body data-takeover="{{ 'true' if takeover_on_load else 'false' }}">
   <div id="dashboard-shell">
     <h1>✦ Wand Dashboard</h1>
     <p class="subtitle">MQTT broker: {{ broker }}:{{ port }} &nbsp;|&nbsp; topic: <code>{{ topic }}</code></p>
@@ -480,7 +480,7 @@
   ></audio>
 
   <script>
-    const AUTO_TAKEOVER = {{ 'true' if takeover_on_load else 'false' }};
+    const AUTO_TAKEOVER = document.body.dataset.takeover === 'true';
     const dashboard  = document.getElementById('dashboard-shell');
     const dot        = document.getElementById('dot');
     const statusText = document.getElementById('status-text');
