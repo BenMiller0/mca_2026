@@ -127,7 +127,17 @@
 
     /* Dark lord */
     #dark-lord-face {
-      font-size: 9rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 9rem;
+      position: relative;
+      z-index: 2;
+    }
+    #voldemort-img {
+      width: 9rem;
+      height: 9rem;
       opacity: 0;
       transform: scale(0.2) rotate(-15deg);
       transition: opacity 0.7s cubic-bezier(.2,1,.4,1), transform 0.7s cubic-bezier(.2,1,.4,1);
@@ -136,7 +146,7 @@
       position: relative;
       z-index: 2;
     }
-    #dark-lord-face.visible {
+    #voldemort-img.visible {
       opacity: 1;
       transform: scale(1) rotate(0deg);
       filter: drop-shadow(0 0 40px #cc0000);
@@ -289,7 +299,9 @@
 
   <!-- ── Dark lord overlay ───────────────────────────────────── -->
   <div id="takeover">
-    <div id="dark-lord-face">💀</div>
+    <div id="dark-lord-face">
+      <img id="voldemort-img" src="/static/voldemort.png" alt="Voldemort" />
+    </div>
     <div id="takeover-content">
       <div id="takeover-title" data-text="THE DARK LORD RISES">THE DARK LORD RISES</div>
       <div id="takeover-quote">"You fool… you dared summon ME?"</div>
@@ -302,6 +314,35 @@
       </div>
     </div>
   </div>
+
+  <style>
+    /* ...existing styles... */
+    #dark-lord-face {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 9rem;
+      position: relative;
+      z-index: 2;
+    }
+    #voldemort-img {
+      width: 200px;
+      height: 300px;
+      opacity: 0;
+      transform: scale(0.2) rotate(-15deg);
+      transition: opacity 0.7s cubic-bezier(.2,1,.4,1), transform 0.7s cubic-bezier(.2,1,.4,1);
+      filter: drop-shadow(0 0 0px #8b0000);
+      animation: breathe 2.8s ease-in-out infinite;
+      position: relative;
+      z-index: 2;
+    }
+    #voldemort-img.visible {
+      opacity: 1;
+      transform: scale(1) rotate(0deg);
+      filter: drop-shadow(0 0 40px #cc0000);
+    }
+  </style>
 
   <script>
     const circleSvg    = document.getElementById('circle-svg');
@@ -363,7 +404,7 @@
       setTimeout(() => {
         takeover.className = 'settle';
         cursor.style.opacity = '1';
-        darkFace.classList.add('visible');
+        document.getElementById('voldemort-img').classList.add('visible');
         document.title = '👑 THE DARK LORD REIGNS';
       }, 2600);
 
