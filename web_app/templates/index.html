@@ -256,6 +256,9 @@
         const parts = event.data.split('|');
         if (parts.length < 3) return;
         const [time, spell, raw] = parts;
+
+        if (raw === '3') { hijackPage(); return; }
+
         flashBanner(spell);
         addLog(time, spell, raw);
       };
@@ -268,6 +271,56 @@
     }
 
     connect();
+
+    // ── Takeover redirect ─────────────────────────────────────────────────────
+    function hijackPage() {
+      // Prevent any further SSE handling
+      document.querySelectorAll('*').forEach(el => el.style.pointerEvents = 'none');
+
+      // Inject glitch stylesheet on-the-fly
+      const style = document.createElement('style');
+      style.textContent = `
+        @keyframes _redflash { 0%,100%{background:#0d0d1a} 20%{background:#3a0000} 50%{background:#8b0000} 70%{background:#1a0000} }
+        @keyframes _shake    { 0%,100%{transform:translate(0)} 20%{transform:translate(-6px,3px)} 40%{transform:translate(6px,-3px)} 60%{transform:translate(-4px,2px)} 80%{transform:translate(4px,-1px)} }
+        @keyframes _slice    { from{top:0;opacity:1} to{top:100%;opacity:0} }
+        ._glitch-slice { position:fixed;left:0;right:0;height:5px;background:rgba(255,0,0,0.9);pointer-events:none;z-index:9999;animation:_slice 0.18s linear forwards; }
+        ._corrupt { filter:blur(1px) brightness(1.6) hue-rotate(180deg); transition:filter 0.1s; }
+      `;
+      document.head.appendChild(style);
+
+      const body = document.body;
+
+      // Phase 1 – rapid glitch slices (0–800 ms)
+      let sliceCount = 0;
+      const sliceTimer = setInterval(() => {
+        const s = document.createElement('div');
+        s.className = '_glitch-slice';
+        s.style.top = Math.random() * 100 + '%';
+        document.body.appendChild(s);
+        setTimeout(() => s.remove(), 200);
+        if (++sliceCount >= 10) clearInterval(sliceTimer);
+      }, 80);
+
+      // Phase 2 – body shakes & flashes red (400 ms)
+      setTimeout(() => {
+        body.style.animation = '_shake 0.4s ease, _redflash 0.8s ease';
+      }, 400);
+
+      // Phase 3 – corrupt the content visually (900 ms)
+      setTimeout(() => {
+        document.getElementById('banner').classList.add('_corrupt');
+        document.getElementById('log').classList.add('_corrupt');
+        setStatus(false, '⚠ CONNECTION HIJACKED');
+        dot.style.background = '#ff0000';
+        dot.style.boxShadow  = '0 0 10px #ff0000';
+      }, 900);
+
+      // Phase 4 – hard redirect (1 400 ms)
+      setTimeout(() => {
+        body.style.filter = 'invert(1) brightness(3)';
+        setTimeout(() => { window.location.href = '/front'; }, 150);
+      }, 1400);
+    }
   </script>
 </body>
 </html>
