@@ -10,7 +10,7 @@ import paho.mqtt.client as mqtt
 MQTT_BROKER   = "172.20.10.5"
 MQTT_PORT     = 1883
 MQTT_TOPIC    = "spell/cast"
-SPELL_MAP     = {"1": "PUSH", "2": "LUMOS", "3": "SUMMON"}
+SPELL_MAP     = {"1": "PUSH", "2": "LUMOS", "3": "SUMMON", "4": "OPEN"}
 
 app = Flask(__name__, static_folder="assets", static_url_path="/assets")
 app.config["TEMPLATES_AUTO_RELOAD"] = True

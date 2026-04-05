@@ -472,9 +472,158 @@
       0%, 100% { opacity: 0; }
       50% { opacity: 1; }
     }
+
+    /* ═══════════════════════════════════════════════
+       PORTAL / TITLE SCREEN
+    ═══════════════════════════════════════════════ */
+    #portal-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      background: #05050f;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2rem;
+      transition: opacity 0.6s ease;
+    }
+    #portal-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .portal-title {
+      font-size: 1.9rem;
+      letter-spacing: 0.18em;
+      color: var(--gold);
+      text-transform: uppercase;
+      text-shadow: 0 0 24px rgba(212,175,55,0.6);
+      animation: portal-title-pulse 3s ease-in-out infinite;
+    }
+    @keyframes portal-title-pulse {
+      0%, 100% { text-shadow: 0 0 18px rgba(212,175,55,0.5); }
+      50%       { text-shadow: 0 0 40px rgba(212,175,55,0.95), 0 0 80px rgba(212,175,55,0.3); }
+    }
+
+    .portal-wrap {
+      position: relative;
+      width: 280px;
+      height: 280px;
+    }
+
+    /* Spinning rings */
+    .portal-ring {
+      position: absolute;
+      border-radius: 50%;
+      border: 3px solid transparent;
+    }
+    .portal-ring:nth-child(1) {
+      inset: 0;
+      background: conic-gradient(from 0deg, #7c3aed, #3b82f6, #06b6d4, #7c3aed) border-box;
+      -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: destination-out;
+      mask-composite: exclude;
+      animation: ring-spin 3s linear infinite;
+      opacity: 0.9;
+    }
+    .portal-ring:nth-child(2) {
+      inset: 20px;
+      background: conic-gradient(from 120deg, #a855f7, #6366f1, #8b5cf6, #a855f7) border-box;
+      -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: destination-out;
+      mask-composite: exclude;
+      animation: ring-spin 2s linear infinite reverse;
+      opacity: 0.8;
+    }
+    .portal-ring:nth-child(3) {
+      inset: 40px;
+      background: conic-gradient(from 240deg, #06b6d4, #7c3aed, #3b82f6, #06b6d4) border-box;
+      -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: destination-out;
+      mask-composite: exclude;
+      animation: ring-spin 1.5s linear infinite;
+      opacity: 0.7;
+    }
+    .portal-ring:nth-child(4) {
+      inset: 60px;
+      background: conic-gradient(from 60deg, #8b5cf6, #06b6d4, #a855f7, #8b5cf6) border-box;
+      -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: destination-out;
+      mask-composite: exclude;
+      animation: ring-spin 1.1s linear infinite reverse;
+      opacity: 0.9;
+    }
+    @keyframes ring-spin { to { transform: rotate(360deg); } }
+
+    /* Inner portal glow */
+    .portal-core {
+      position: absolute;
+      inset: 75px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #1e0050 0%, #0a001a 60%, transparent 100%);
+      box-shadow:
+        0 0 30px 10px rgba(124,58,237,0.5),
+        0 0 60px 20px rgba(59,130,246,0.3),
+        inset 0 0 40px rgba(139,92,246,0.4);
+      animation: core-pulse 2s ease-in-out infinite;
+    }
+    @keyframes core-pulse {
+      0%, 100% { box-shadow: 0 0 30px 10px rgba(124,58,237,0.5), 0 0 60px 20px rgba(59,130,246,0.3), inset 0 0 40px rgba(139,92,246,0.4); }
+      50%       { box-shadow: 0 0 50px 20px rgba(124,58,237,0.8), 0 0 90px 35px rgba(59,130,246,0.5), inset 0 0 60px rgba(139,92,246,0.7); }
+    }
+
+    /* Canvas for particles */
+    #portal-canvas {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .portal-prompt {
+      font-size: 0.9rem;
+      color: var(--muted);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      animation: blink 1.8s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:0.4} 50%{opacity:1} }
+
+    /* Portal collapse animation on OPEN */
+    #portal-screen.collapsing .portal-wrap {
+      animation: portal-collapse 0.7s cubic-bezier(.4,0,.2,1) forwards;
+    }
+    #portal-screen.collapsing .portal-title,
+    #portal-screen.collapsing .portal-prompt {
+      animation: fade-up 0.4s ease forwards;
+    }
+    @keyframes portal-collapse {
+      0%   { transform: scale(1); opacity: 1; filter: brightness(1); }
+      60%  { transform: scale(1.15); opacity: 1; filter: brightness(3); }
+      100% { transform: scale(0); opacity: 0; }
+    }
+    @keyframes fade-up {
+      to { opacity: 0; transform: translateY(-20px); }
+    }
   </style>
 </head>
 <body data-takeover="{{ 'true' if takeover_on_load else 'false' }}">
+
+  <!-- ── Portal / Title Screen ──────────────────────────────── -->
+  <div id="portal-screen">
+    <div class="portal-title">✦ Wand Spellcaster ✦</div>
+    <div class="portal-wrap">
+      <div class="portal-ring"></div>
+      <div class="portal-ring"></div>
+      <div class="portal-ring"></div>
+      <div class="portal-ring"></div>
+      <canvas id="portal-canvas" width="280" height="280"></canvas>
+      <div class="portal-core"></div>
+    </div>
+    <div class="portal-prompt">Say "OPEN" to enter</div>
+  </div>
+
   <div id="dashboard-shell">
     <h1>✦ Wand Dashboard</h1>
     <p class="subtitle">MQTT broker: {{ broker }}:{{ port }} &nbsp;|&nbsp; topic: <code>{{ topic }}</code></p>
@@ -549,51 +698,105 @@
   ></audio>
 
   <script>
-    const AUTO_TAKEOVER = document.body.dataset.takeover === 'true';
-    const dashboard  = document.getElementById('dashboard-shell');
-    const dot        = document.getElementById('dot');
-    const statusText = document.getElementById('status-text');
-    const banner     = document.getElementById('banner');
-    const spellName  = document.getElementById('spell-name');
-    const spellSub   = document.getElementById('spell-sub');
-    const log        = document.getElementById('log');
-    const counter    = document.getElementById('counter');
-    const takeover   = document.getElementById('takeover');
-    const content    = document.getElementById('takeover-content');
-    const decrees    = document.querySelectorAll('.decree');
-    const vignette   = document.getElementById('vignette');
-    const cursor     = document.getElementById('blood-cursor');
-    const voiceLine  = document.getElementById('voice-line');
-    const themeTrack = document.getElementById('theme-track');
-    const voldemortImg = document.getElementById('voldemort-img');
+    // ── State machine: 'portal' → 'dashboard' → 'takeover' → 'portal' ─────────
+    // STATE: 'portal' | 'dashboard' | 'takeover'
+    let STATE = 'portal';
+    let activeES = null;  // single SSE connection at a time
 
-    let totalCount = 0;
-    let flashTimer = null;
-    let takeoverActive = false;
+    // ── DOM refs ───────────────────────────────────────────────────────────────
+    const AUTO_TAKEOVER  = document.body.dataset.takeover === 'true';
+    const portalScreen   = document.getElementById('portal-screen');
+    const portalCanvas   = document.getElementById('portal-canvas');
+    const dashboard      = document.getElementById('dashboard-shell');
+    const dot            = document.getElementById('dot');
+    const statusText     = document.getElementById('status-text');
+    const banner         = document.getElementById('banner');
+    const spellName      = document.getElementById('spell-name');
+    const spellSub       = document.getElementById('spell-sub');
+    const log            = document.getElementById('log');
+    const counter        = document.getElementById('counter');
+    const takeover       = document.getElementById('takeover');
+    const content        = document.getElementById('takeover-content');
+    const decrees        = document.querySelectorAll('.decree');
+    const vignette       = document.getElementById('vignette');
+    const cursor         = document.getElementById('blood-cursor');
+    const voiceLine      = document.getElementById('voice-line');
+    const themeTrack     = document.getElementById('theme-track');
+    const voldemortImg   = document.getElementById('voldemort-img');
 
-    const SPELL_LABELS = { '1': 'PUSH', '2': 'LUMOS' };
-    const SPELL_CSS    = { 'PUSH': 'push', 'LUMOS': 'lumos' };
+    let totalCount  = 0;
+    let flashTimer  = null;
 
+    const SPELL_CSS = { 'PUSH': 'push', 'LUMOS': 'lumos' };
     const sfx = {
       PUSH:  document.getElementById('sfx-push'),
       LUMOS: document.getElementById('sfx-lumos'),
     };
+
+    // ── Blood cursor ───────────────────────────────────────────────────────────
+    document.addEventListener('mousemove', e => {
+      cursor.style.left = e.clientX + 'px';
+      cursor.style.top  = e.clientY + 'px';
+    });
+
+    // ── Portal canvas particles ────────────────────────────────────────────────
+    (function initPortalParticles() {
+      const ctx  = portalCanvas.getContext('2d');
+      const W    = portalCanvas.width;
+      const H    = portalCanvas.height;
+      const cx   = W / 2, cy = H / 2;
+      const particles = Array.from({ length: 60 }, () => makeParticle());
+
+      function makeParticle() {
+        const angle  = Math.random() * Math.PI * 2;
+        const radius = 30 + Math.random() * 90;
+        return {
+          angle,
+          radius,
+          speed:  0.008 + Math.random() * 0.018,
+          size:   1 + Math.random() * 2.5,
+          alpha:  0.3 + Math.random() * 0.7,
+          drift:  (Math.random() - 0.5) * 0.3,   // slowly spiral inward
+          hue:    220 + Math.random() * 80,       // blue–purple range
+        };
+      }
+
+      function tick() {
+        ctx.clearRect(0, 0, W, H);
+        for (const p of particles) {
+          p.angle  += p.speed;
+          p.radius += p.drift;
+          if (p.radius < 10 || p.radius > 130) {
+            Object.assign(p, makeParticle());
+            continue;
+          }
+          const x = cx + Math.cos(p.angle) * p.radius;
+          const y = cy + Math.sin(p.angle) * p.radius;
+          ctx.beginPath();
+          ctx.arc(x, y, p.size, 0, Math.PI * 2);
+          ctx.fillStyle = `hsla(${p.hue}, 90%, 70%, ${p.alpha})`;
+          ctx.fill();
+        }
+        requestAnimationFrame(tick);
+      }
+      tick();
+    })();
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    function closeES() {
+      if (activeES) { activeES.close(); activeES = null; }
+    }
+
+    function setStatus(connected, text) {
+      dot.className      = 'dot ' + (connected ? 'connected' : 'error');
+      statusText.textContent = text;
+    }
 
     function playSpellSfx(spell) {
       const audio = sfx[spell];
       if (!audio) return;
       audio.currentTime = 0;
       audio.play().catch(() => {});
-    }
-
-    document.addEventListener('mousemove', event => {
-      cursor.style.left = event.clientX + 'px';
-      cursor.style.top = event.clientY + 'px';
-    });
-
-    function setStatus(connected, text) {
-      dot.className  = 'dot ' + (connected ? 'connected' : 'error');
-      statusText.textContent = text;
     }
 
     function flashBanner(spell) {
@@ -605,7 +808,6 @@
       spellSub.textContent  = spell === 'PUSH'  ? 'Wingardium Leviosa!' :
                               spell === 'LUMOS' ? 'Let there be light!'  :
                               'Unknown spell';
-
       clearTimeout(flashTimer);
       flashTimer = setTimeout(() => {
         banner.className    = 'spell-banner';
@@ -614,251 +816,229 @@
     }
 
     function addLog(time, spell, raw) {
-      // Remove empty-state placeholder
       const empty = log.querySelector('.empty-state');
       if (empty) empty.remove();
-
       const entry = document.createElement('div');
       entry.className = 'log-entry';
       entry.innerHTML =
         `<span class="log-time">${time}</span>` +
         `<span class="log-spell ${(SPELL_CSS[spell] || '').toLowerCase()}">${spell}</span>` +
         `<span class="log-raw">payload=${raw}</span>`;
-
       log.insertBefore(entry, log.firstChild);
-
-      // Keep only 100 entries
       while (log.children.length > 100) log.removeChild(log.lastChild);
-
       totalCount++;
       counter.textContent = `Total spells received: ${totalCount}`;
     }
 
     function spawnSlice() {
-      const slice = document.createElement('div');
-      slice.className = 'gslice';
-      slice.style.top = Math.random() * 100 + '%';
-      document.body.appendChild(slice);
-      setTimeout(() => slice.remove(), 220);
+      const s = document.createElement('div');
+      s.className = 'gslice';
+      s.style.top = Math.random() * 100 + '%';
+      document.body.appendChild(s);
+      setTimeout(() => s.remove(), 220);
     }
 
     function waitForAudioToFinish(audioEl) {
       return new Promise(resolve => {
-        if (audioEl.ended) {
-          resolve();
-          return;
-        }
-
-        const cleanup = () => {
-          audioEl.removeEventListener('ended', handleDone);
-          audioEl.removeEventListener('error', handleDone);
-        };
-
-        const handleDone = () => {
-          cleanup();
-          resolve();
-        };
-
-        audioEl.addEventListener('ended', handleDone, { once: true });
-        audioEl.addEventListener('error', handleDone, { once: true });
+        if (audioEl.ended) { resolve(); return; }
+        audioEl.addEventListener('ended', resolve, { once: true });
+        audioEl.addEventListener('error', resolve, { once: true });
       });
     }
 
     async function playTakeoverAudio() {
       voiceLine.currentTime = 0;
-      voiceLine.muted = false;
       themeTrack.currentTime = 0;
-      themeTrack.muted = false;
       themeTrack.volume = 0.45;
-
       try {
         await voiceLine.play();
         await waitForAudioToFinish(voiceLine);
         await themeTrack.play();
-      } catch (error) {
-        // Browsers may still block autoplay without a trusted user gesture.
-      }
+      } catch (_) {}
     }
 
-    function runTakeover() {
-      if (takeoverActive) return;
-      takeoverActive = true;
+    // ═══════════════════════════════════════════════
+    //  STATE TRANSITIONS
+    // ═══════════════════════════════════════════════
 
-      if (window.location.search.includes('takeover=1')) {
+    // ── portal → dashboard ────────────────────────────────────────────────────
+    function openPortal() {
+      portalScreen.classList.add('collapsing');
+      setTimeout(() => {
+        portalScreen.classList.add('hidden');
+        portalScreen.classList.remove('collapsing');
+        STATE = 'dashboard';
+        connectDashboard();
+      }, 800);
+    }
+
+    // ── dashboard → takeover ──────────────────────────────────────────────────
+    function runTakeover() {
+      if (STATE !== 'dashboard') return;
+      STATE = 'takeover';
+      closeES();
+
+      if (window.location.search.includes('takeover=1'))
         window.history.replaceState({}, document.title, '/');
-      }
 
       document.body.classList.add('takeover-active');
       playTakeoverAudio();
 
-      spellName.className = 'spell-name active';
+      spellName.className   = 'spell-name active';
       spellName.textContent = 'SUMMON';
-      spellSub.textContent = '⚠ Something stirs in the darkness…';
-      spellSub.style.color = '#f59e0b';
+      spellSub.textContent  = '⚠ Something stirs in the darkness…';
+      spellSub.style.color  = '#f59e0b';
       setStatus(false, '⚠ CONNECTION HIJACKED');
       dot.style.background = '#ff0000';
-      dot.style.boxShadow = '0 0 10px #ff0000';
+      dot.style.boxShadow  = '0 0 10px #ff0000';
 
       setTimeout(() => vignette.classList.add('pulse'), 300);
 
       let n = 0;
-      const sliceTimer = setInterval(() => {
-        spawnSlice();
-        if (++n >= 14) clearInterval(sliceTimer);
-      }, 75);
+      const si = setInterval(() => { spawnSlice(); if (++n >= 14) clearInterval(si); }, 75);
 
       setTimeout(() => {
         spellName.textContent = 'BACKFIRE';
-        spellSub.textContent = '⚡ THE RITUAL BACKFIRES!';
-        spellSub.style.color = '#ef4444';
+        spellSub.textContent  = '⚡ THE RITUAL BACKFIRES!';
+        spellSub.style.color  = '#ef4444';
       }, 600);
 
       setTimeout(() => {
-        takeover.className = 'flash';
-        dashboard.style.transform = 'scale(1.01)';
+        takeover.className         = 'flash';
+        dashboard.style.transform  = 'scale(1.01)';
       }, 1100);
 
       setTimeout(() => {
-        takeover.className = 'noise';
-        dashboard.style.filter = 'blur(10px) brightness(0.15)';
+        takeover.className       = 'noise';
+        dashboard.style.filter   = 'blur(10px) brightness(0.15)';
       }, 1800);
 
       setTimeout(() => {
-        takeover.className = 'settle';
-        cursor.style.opacity = '1';
+        takeover.className         = 'settle';
+        cursor.style.opacity       = '1';
         voldemortImg.classList.add('visible');
-        document.title = 'THE DARK LORD REIGNS';
+        document.title             = 'THE DARK LORD REIGNS';
       }, 2600);
 
       setTimeout(() => content.classList.add('visible'), 3400);
-
-      decrees.forEach((decree, index) => {
-        setTimeout(() => decree.classList.add('visible'), 4100 + index * 450);
-      });
+      decrees.forEach((d, i) => setTimeout(() => d.classList.add('visible'), 4100 + i * 450));
 
       setTimeout(() => {
-        takeover.style.animation = 'none';
-        takeover.style.background =
-          'radial-gradient(ellipse at 50% 40%, #1c0000 0%, #050000 55%, #000 100%)';
-        // Now that takeover is fully settled, reconnect SSE to listen for escape spell
-        connectPostTakeover();
+        takeover.style.animation  = 'none';
+        takeover.style.background = 'radial-gradient(ellipse at 50% 40%, #1c0000 0%, #050000 55%, #000 100%)';
+        connectPostTakeover();   // listen for any spell to escape
       }, 7000);
     }
 
-    // ── Reset / escape the takeover ───────────────────────────────────────────
-    function resetPage() {
-      // Flash white, then sweep everything away
-      takeover.style.transition = 'opacity 0.3s ease';
-      takeover.style.filter = 'brightness(8) invert(1)';
+    // ── takeover → portal ────────────────────────────────────────────────────
+    function escapeToPortal() {
+      STATE = 'transitioning';
+      closeES();
 
+      // Flash white, fade out takeover
+      takeover.style.transition = 'opacity 0.3s ease';
+      takeover.style.filter     = 'brightness(8) invert(1)';
       setTimeout(() => {
         takeover.style.transition = 'opacity 0.6s ease';
-        takeover.style.opacity = '0';
+        takeover.style.opacity    = '0';
       }, 200);
 
       setTimeout(() => {
-        // Hide takeover fully
+        // Tear down takeover
         takeover.style.display = 'none';
-
-        // Restore dashboard
         document.body.classList.remove('takeover-active');
         document.body.style.overflow = '';
-        dashboard.style.filter = '';
+        dashboard.style.filter    = '';
         dashboard.style.transform = '';
-
-        // Reset cursor
-        cursor.style.opacity = '0';
-
-        // Reset title & status
-        document.title = 'Wand Spell Dashboard';
-        setStatus(true, 'Connected — listening for spells');
-        dot.style.background = '';
-        dot.style.boxShadow = '';
-
-        // Reset banner
-        banner.className = 'spell-banner';
-        spellName.className = 'spell-name';
-        spellName.textContent = '—';
-        spellSub.textContent = 'Waiting for a spell…';
-        spellSub.style.color = '';
-
-        // Clear log and counter
-        log.innerHTML = '<div class="empty-state">No spells received yet.</div>';
-        totalCount = 0;
-        counter.textContent = '';
-
-        // Reset vignette
+        cursor.style.opacity      = '0';
+        dot.style.background      = '';
+        dot.style.boxShadow       = '';
         vignette.classList.remove('pulse');
-
-        // Stop takeover audio
         themeTrack.pause();
         themeTrack.currentTime = 0;
-
-        // Reset takeover element for potential re-use
-        takeoverActive = false;
-        takeover.className = '';
+        takeover.className        = '';
         takeover.removeAttribute('style');
         voldemortImg.classList.remove('visible');
         content.classList.remove('visible');
         decrees.forEach(d => d.classList.remove('visible'));
 
-        // Reconnect normal SSE
-        connect();
+        // Reset dashboard content
+        banner.className    = 'spell-banner';
+        spellName.className = 'spell-name';
+        spellName.textContent = '—';
+        spellSub.textContent  = 'Waiting for a spell…';
+        spellSub.style.color  = '';
+        log.innerHTML         = '<div class="empty-state">No spells received yet.</div>';
+        totalCount            = 0;
+        counter.textContent   = '';
+        document.title        = 'Wand Spell Dashboard';
+
+        // Show portal again
+        portalScreen.classList.remove('hidden');
+        STATE = 'portal';
+        connectPortal();
       }, 800);
     }
 
-    // ── SSE after takeover — listens for any spell to escape ─────────────────
-    function connectPostTakeover() {
-      const es = new EventSource('/stream');
+    // ═══════════════════════════════════════════════
+    //  SSE LISTENERS PER STATE
+    // ═══════════════════════════════════════════════
 
+    function connectPortal() {
+      closeES();
+      const es = new EventSource('/stream');
+      activeES = es;
       es.onmessage = (event) => {
         const parts = event.data.split('|');
         if (parts.length < 3) return;
-        es.close();
-        resetPage();
+        const raw = parts[2];
+        if (raw === '4') { closeES(); openPortal(); }  // OPEN — web only, not Arduino
       };
-
-      es.onerror = () => {
-        es.close();
-        // Retry in case of disconnect
-        setTimeout(connectPostTakeover, 3000);
-      };
+      es.onerror = () => { es.close(); setTimeout(connectPortal, 3000); };
     }
 
-    // ── SSE ──────────────────────────────────────────────────────────────────
-    function connect() {
+    function connectDashboard() {
+      closeES();
       setStatus(false, 'Connecting to server…');
       const es = new EventSource('/stream');
-
+      activeES = es;
       es.onopen = () => setStatus(true, 'Connected — listening for spells');
-
       es.onmessage = (event) => {
-        // format: "HH:MM:SS|SPELL|rawPayload"
         const parts = event.data.split('|');
         if (parts.length < 3) return;
         const [time, spell, raw] = parts;
-
-        if (raw === '3') {
-          es.close();
-          runTakeover();
-          return;
-        }
-
+        if (raw === '3') { closeES(); runTakeover(); return; }
         flashBanner(spell);
         addLog(time, spell, raw);
       };
-
       es.onerror = () => {
         setStatus(false, 'Connection lost — retrying…');
         es.close();
-        setTimeout(connect, 3000);
+        setTimeout(connectDashboard, 3000);
       };
     }
 
-    connect();
+    function connectPostTakeover() {
+      closeES();
+      const es = new EventSource('/stream');
+      activeES = es;
+      es.onmessage = (event) => {
+        const parts = event.data.split('|');
+        if (parts.length < 3) return;
+        closeES();
+        escapeToPortal();
+      };
+      es.onerror = () => { es.close(); setTimeout(connectPostTakeover, 3000); };
+    }
 
+    // ── Boot ───────────────────────────────────────────────────────────────────
     if (AUTO_TAKEOVER) {
+      // Came from /front redirect — skip portal, go straight to takeover
+      portalScreen.classList.add('hidden');
+      STATE = 'dashboard';
       runTakeover();
+    } else {
+      connectPortal();
     }
   </script>
 </body>
