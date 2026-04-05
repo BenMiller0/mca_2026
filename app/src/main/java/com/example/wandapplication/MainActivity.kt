@@ -366,11 +366,7 @@ class MainActivity : AppCompatActivity() {
                 updateIndicator(true)
                 statusText.text = result.message
 
-                // Auto-publish when a wand gesture spell is recognised
-                when (result.spell) {
-                    "STUPEFY" -> publishSpell("1")
-                    "LUMOS"   -> publishSpell("2")
-                }
+
             } else {
                 wandOverlay.clearWand()
                 updateIndicator(false)
